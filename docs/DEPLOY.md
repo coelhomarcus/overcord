@@ -55,7 +55,7 @@ When migrating an older bundled installation, keep its PostgreSQL data and the u
 
 ## Administration site
 
-With `ADMIN_URL` set, the same process answers that host with the administration site's build (`admin/dist`) and its own Content-Security-Policy. On that host it reaches only `/api/admin/*`, `/api/csp-reports`, `/uploads/` (profile and server images) and the health checks. Everything else answers `404`, including the public API, `/ws` and `/sw.js`. The public host answers `404` for `/admin`, its subpaths and `/api/admin/*`.
+With `ADMIN_URL` set, the same process answers that host with the administration site's build (`admin/dist`) and its own Content-Security-Policy. On that host it reaches only `/api/admin/*`, `/api/csp-reports`, `/api/client-logs` (the panel's error reports, logged with `site: admin`), `/uploads/` (profile and server images) and the health checks. Everything else answers `404`, including the public API, `/ws` and `/sw.js`. The public host answers `404` for `/admin`, its subpaths and `/api/admin/*`.
 
 `ADMIN_URL` must be a different origin from `APP_URL` and use HTTPS (plain HTTP only on loopback). Administrator sign-in requires a password and a code from an authenticator app (or a recovery code) every time; the panel never accepts an emailed code, since the inbox alone can reset the password. Each panel session lasts up to 24 hours from sign-in and can be ended from the account's session list. Instance-wide administration happens on the panel. Chat and voice moderation in the main app uses the permissions and role hierarchy of the affected server.
 
@@ -227,7 +227,7 @@ The server writes one JSON line per record to stdout and stderr (`LOG_FORMAT=jso
 
 - **Client addresses** only on security events: failed or refused logins, refused sign-ups and wrong invite codes, refused login or recovery codes, and refused socket connections past the per-address limit. Routine records (a socket joining, an outdated client) carry none.
 - **Failed logins never carry the typed username**, since people type their password there by mistake. A name that matched an account is logged as that account's `userId`; any other as `usernameTag`, a 12-character keyed hash that repeats for the same name until the next restart and cannot be reversed from the log.
-- **Browser errors** (`POST /api/client-logs`) are always under the `client` component with the reporting `userId`, or `null` when signed out. A signed-out page can only produce `warn` records (an `error` it sent is kept as `warn` with `reportedLevel: "error"`), so alerts on `error` only see the server and signed-in clients, and control characters in the message are replaced with spaces.
+- **Browser errors** (`POST /api/client-logs`) are always under the `client` component with the reporting `userId`, or `null` when signed out, and `site` (`app`, or `admin` for the administration site, whose account is its panel session's). A signed-out page can only produce `warn` records (an `error` it sent is kept as `warn` with `reportedLevel: "error"`), so alerts on `error` only see the server and signed-in clients, and control characters in the message are replaced with spaces.
 
 Keep logs for at most **30 days**. The standalone `docker run` command rotates them at 5 files of 10 MB, which on a small instance is days to a few weeks; with Dokploy, or any other log collector, set the same bound in its log settings. The addresses stored with each login session (Settings → Security) are database data and follow the session, not this policy.
 

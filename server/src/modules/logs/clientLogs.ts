@@ -6,13 +6,15 @@ import { parseCookies } from '../../http/cookies.js';
 import { jsonBody, sendError } from '../../http/respond.js';
 import * as floodControl from '../../realtime/floodControl.js';
 import { resolveSession } from '../auth/session.js';
+import { adminCookieName } from '../admin/adminOrigin.js';
 
 // Errors the BROWSER hit, written into the same log as the server's own so one
 // stream tells the whole story. The client is untrusted: only warn/error, every
 // field is cut to a small size, and everything passes through the logger's
 // redaction like any other record. Records are always under the `client` component and carry the
 // account (or null), so they never pass for the server's own; a signed-out page cannot raise an
-// `error`, which is what alerts watch.
+// `error`, which is what alerts watch. The administration site reports here too, from its own host: there
+// the account is the panel session's, and the record says `site: 'admin'`.
 
 const log = logger.child({ component: 'client' });
 
@@ -57,7 +59,8 @@ export function parseClientLog(body: Record<string, unknown>): ClientLogEntry | 
 
 async function handleClientLog(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const cookies = parseCookies(request.headers.cookie || '');
-  const sess = await resolveSession(cookies[config.SESSION_COOKIE]);
+  const panel = config.ADMIN_ORIGIN !== null && request.headers.host?.toLowerCase() === config.ADMIN_ORIGIN.host;
+  const sess = panel ? await resolveSession(cookies[adminCookieName()], 'admin') : await resolveSession(cookies[config.SESSION_COOKIE]);
   // by IP and by account: a signed-out page can report too, but cannot flood
   if (!floodControl.allow(`client-log:${rateLimitSubjectOf(request)}`, { windowMs: 60_000, max: 30 })) return void reply.code(204).send();
   const entry = parseClientLog(jsonBody(request.body));
@@ -65,7 +68,9 @@ async function handleClientLog(request: FastifyRequest, reply: FastifyReply): Pr
 
   const { level: reported, message, ...rest } = entry;
   const level = sess ? reported : 'warn';
-  const fields = { ...rest, ...(level !== reported ? { reportedLevel: reported } : {}), userId: sess?.userId ?? null, reqId: request.id };
+  const fields = {
+    ...rest, ...(level !== reported ? { reportedLevel: reported } : {}), site: panel ? 'admin' : 'app', userId: sess?.userId ?? null, reqId: request.id,
+  };
   if (level === 'error') log.error(message, undefined, fields); else log.warn(message, fields);
   reply.code(204).send();
 }

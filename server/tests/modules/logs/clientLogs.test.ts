@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
+import { config } from '../../../src/config/env.js';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { parseClientLog, registerClientLogRoutes } from '../../../src/modules/logs/clientLogs.js';
 
@@ -66,5 +67,19 @@ describe('POST /api/client-logs', () => {
     assert.doesNotMatch(line, /ERROR|"level":"error"/);
     assert.match(line, /\[client\]|"component":"client"/);
     assert.match(line, /reportedLevel/);
+  });
+
+  it('says which site reported, the administration site included', async () => {
+    const saved = config.ADMIN_ORIGIN;
+    config.ADMIN_ORIGIN = { url: 'https://admin.example.com', host: 'admin.example.com', secure: true };
+    try {
+      lines.length = 0;
+      await app.inject({ method: 'POST', url: '/api/client-logs', headers: { host: 'admin.example.com' }, payload: { level: 'warn', message: 'panel broke' } });
+      await app.inject({ method: 'POST', url: '/api/client-logs', headers: { host: 'chat.example.com' }, payload: { level: 'warn', message: 'app broke' } });
+      assert.match(lines.find((l) => l.includes('panel broke')) ?? '', /site[^a-z]+admin/);
+      assert.match(lines.find((l) => l.includes('app broke')) ?? '', /site[^a-z]+app/);
+    } finally {
+      config.ADMIN_ORIGIN = saved;
+    }
   });
 });
