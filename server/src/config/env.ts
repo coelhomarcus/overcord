@@ -150,6 +150,13 @@ if (adminUrl && (!adminOrigin || adminOrigin.username || adminOrigin.password ||
   throw new Error('ADMIN_URL must be a separate HTTPS origin (HTTP is allowed on loopback).');
 }
 const ADMIN_ORIGIN = adminOrigin ? { url: adminOrigin.origin, host: adminOrigin.host, secure: adminOrigin.protocol === 'https:' } : null;
+// Seals the authenticator-app secrets at rest (modules/auth/secretBox.ts). It stays out of the database and its
+// backups, so neither alone can mint codes. Without it the instance cannot offer authenticator apps.
+const totpKeyText = (process.env.TOTP_ENCRYPTION_KEY || '').trim();
+const TOTP_ENCRYPTION_KEY = totpKeyText ? Buffer.from(totpKeyText, 'base64') : null;
+if (TOTP_ENCRYPTION_KEY && (TOTP_ENCRYPTION_KEY.length !== 32 || TOTP_ENCRYPTION_KEY.toString('base64') !== totpKeyText)) {
+  throw new Error('TOTP_ENCRYPTION_KEY must be 32 random bytes in base64 (openssl rand -base64 32).');
+}
 const PUSH_VAPID_PUBLIC_KEY = (process.env.PUSH_VAPID_PUBLIC_KEY || '').trim();
 const PUSH_VAPID_PRIVATE_KEY = (process.env.PUSH_VAPID_PRIVATE_KEY || '').trim();
 const PUSH_VAPID_SUBJECT = (process.env.PUSH_VAPID_SUBJECT || '').trim();
@@ -299,6 +306,7 @@ export const config = {
   COOKIE_SECURE, MAX_BODY_BYTES,
   MIN_USERNAME_LEN, MAX_USERNAME_LEN, MAX_DISPLAY_NAME_LEN, MIN_PASSWORD_LEN, MAX_PASSWORD_LEN,
   RESEND_API_KEY, RESEND_FROM_EMAIL, RESEND_API_URL, APP_URL, ADMIN_ORIGIN, AUTH_CODE_TTL_MS, AUTH_CODE_MAX_ATTEMPTS, LOGIN_CODE_TTL_MS,
+  TOTP_ENCRYPTION_KEY,
   PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY, PUSH_VAPID_SUBJECT,
   LIVEKIT_URL, LIVEKIT_SERVER_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_ROOM_NAME, LIVEKIT_TOKEN_TTL_SECONDS,
   UPLOADS_REMOTE_URL, KLIPY_API_KEY, MAL_CLIENT_ID, IGDB_CLIENT_ID, IGDB_CLIENT_SECRET, STEAM_WEB_API_KEY, STEAMGRIDDB_API_KEY, MEDIA_PROXY_ENABLED, DESKTOP_RELEASES_REPO,
