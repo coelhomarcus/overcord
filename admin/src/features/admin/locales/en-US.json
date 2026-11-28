@@ -194,6 +194,7 @@
     "searchNameOrServer": "Search by name, server or ID"
   },
   "dialog": {
+    "authenticatorPrompt": "Type the 6-digit code your authenticator app shows now.",
     "reasonLabel": "Reason (recorded in the audit)",
     "confirmPrompt": "To confirm, type",
     "currentPassword": "Current password",

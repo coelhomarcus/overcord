@@ -4,7 +4,7 @@ import { sendJson, sendError, jsonBody } from '../../http/respond.js';
 import type { ErrorCode } from '../../http/errors.js';
 import * as floodControl from '../../realtime/floodControl.js';
 import { requireAdmin, requireAdminSession } from './adminAuth.js';
-import { confirmPassword, sendCurrentEmailCode, verifyCurrentEmailCode, type CurrentEmailPurpose } from '../auth/accountConfirmation.js';
+import { confirmPassword, secondFactorOf, sendSecondFactorChallenge, verifySecondFactor, type CurrentEmailPurpose } from '../auth/accountConfirmation.js';
 import { findById } from '../users/users.js';
 import { normalizeReason } from './adminPolicy.js';
 import { listAudit } from './auditLog.js';
@@ -88,8 +88,9 @@ async function mutating(request: FastifyRequest, reply: FastifyReply) {
 type Mutating = NonNullable<Awaited<ReturnType<typeof mutating>>>;
 type StepUpPurpose = Extract<CurrentEmailPurpose, 'admin_role_change' | 'admin_backup' | 'admin_account_action'>;
 
-// What a stolen panel session must not be able to do on its own: the acting admin's current password, then a
-// code sent to their address, bound to this session, the action, its target and the written reason.
+// What a stolen panel session must not be able to do on its own: the acting admin's current password, then their
+// second factor (a code from their authenticator app, else one sent to their address), bound to this session, the
+// action, its target and the written reason.
 const stepUpScope = (m: Mutating, action: string, targetId: string) =>
   crypto.createHash('sha256').update(JSON.stringify([m.session.tokenHash, action, targetId, m.reason])).digest('hex');
 
@@ -97,15 +98,15 @@ const stepUpScope = (m: Mutating, action: string, targetId: string) =>
 async function sendStepUpCode(reply: FastifyReply, m: Mutating, purpose: StepUpPurpose, scope: string): Promise<void> {
   if (!await confirmPassword(reply, m.session, String(m.body.password ?? ''))) return;
   const user = await findById(m.actor.id);
-  if (user?.role !== 'admin' || user.status !== 'active' || !user.twoFactorEmail) {
+  if (user?.role !== 'admin' || user.status !== 'active' || !(await secondFactorOf(user))) {
     return sendError(reply, 403, 'forbidden', 'Você não tem mais permissão de administrador.');
   }
-  return sendCurrentEmailCode(reply, user, purpose, scope);
+  return sendSecondFactorChallenge(reply, user, purpose, scope);
 }
 
 /** The second step: the body's `code`. Answers the request itself when it is refused. */
 const verifyStepUp = (request: FastifyRequest, reply: FastifyReply, m: Mutating, purpose: StepUpPurpose, scope: string) =>
-  verifyCurrentEmailCode(request, reply, m.session, purpose, scope);
+  verifySecondFactor(request, reply, m.session, purpose, scope);
 
 type AdminAccountAction = 'suspend' | 'delete';
 
@@ -268,7 +269,7 @@ export function registerAdminRoutes(fastify: FastifyInstance): void {
   });
 
   // A full backup: the page's numbers, a one-time link and the ZIP it streams. See backupDownload.ts. The ZIP holds
-  // every account and message, so the link needs a reason, the password and an emailed code, like the role changes.
+  // every account and message, so the link needs a reason, the password and the second factor, like the role changes.
   fastify.get('/api/admin/backup', (request, reply) => reading(request, reply, () => getBackupInfo()));
   // Checked before a code is sent and again before it is spent, so a refusal never wastes one.
   const backupRefusal = async (reply: FastifyReply): Promise<boolean> => {

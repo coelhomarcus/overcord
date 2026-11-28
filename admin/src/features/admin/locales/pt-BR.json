@@ -194,6 +194,7 @@
     "searchNameOrServer": "Buscar por nome, servidor ou ID"
   },
   "dialog": {
+    "authenticatorPrompt": "Digite o código de 6 dígitos que o seu app autenticador mostra agora.",
     "reasonLabel": "Motivo (fica registrado na auditoria)",
     "confirmPrompt": "Para confirmar, digite",
     "currentPassword": "Senha atual",

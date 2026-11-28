@@ -61,6 +61,22 @@ describe('BackupPage', () => {
     expect(await screen.findByText(/O download começou no seu navegador/)).toBeInTheDocument();
   });
 
+  it('asks for the authenticator app code when the admin has one, with no new code to ask for', async () => {
+    const u = userEvent.setup();
+    mocked.requestBackupCode.mockResolvedValue({ codeRequired: true, method: 'authenticator' });
+    mocked.requestBackupDownload.mockResolvedValue({ url: '/api/admin/backup/download/tok', expiresAt: '2026-11-26T10:01:00.000Z' });
+    open();
+    await u.click(await screen.findByRole('button', { name: 'Baixar backup' }));
+    await u.type(screen.getByLabelText(/Motivo/), 'before upgrade');
+    await u.type(screen.getByLabelText('Senha atual'), 'secret');
+    await u.click(screen.getByRole('button', { name: 'Enviar código' }));
+    expect(await screen.findByText('Digite o código de 6 dígitos que o seu app autenticador mostra agora.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Solicitar novo código' })).not.toBeInTheDocument();
+    await u.type(screen.getByLabelText('Código de verificação'), '654321');
+    await u.click(screen.getByRole('button', { name: 'Baixar' }));
+    await waitFor(() => expect(mocked.requestBackupDownload).toHaveBeenCalledWith('before upgrade', '654321'));
+  });
+
   it('explains a refusal in the dialog and starts nothing', async () => {
     const u = userEvent.setup();
     mocked.requestBackupCode.mockRejectedValue(new ApiError(409, 'backup_running', 'Outro backup está sendo baixado.'));

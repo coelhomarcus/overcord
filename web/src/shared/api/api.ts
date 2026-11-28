@@ -60,13 +60,22 @@ export function fetchSecurityStatus(): Promise<SecurityStatus> {
   return apiFetch('/api/auth/security');
 }
 
-/** A code sent to the account's current email, which the matching confirm call takes. With two-step login on,
- * that email is the second factor of every change that could take it away. */
-export interface CurrentEmailCodeSent { codeRequired: true; email: string }
+/** A code sent to the account's current email, which the matching confirm call takes. */
+export interface CurrentEmailCodeSent { codeRequired: true; method?: 'email'; email: string }
+
+/** What a sensitive change asks after the password, with two-step login on: a code sent to the account's current
+ * email, or (`method: 'authenticator'`) one its authenticator app shows. A server older than authenticator apps
+ * sends no `method`. */
+export type SecondFactorRequested = CurrentEmailCodeSent | { codeRequired: true; method: 'authenticator' };
+
+/** The masked address the code went to, or null when the authenticator app shows it. */
+export function codeSentTo(asked: SecondFactorRequested): string | null {
+  return asked.method === 'authenticator' ? null : asked.email;
+}
 
 /** Turning them on asks nothing; turning them off asks the password and, with two-step login on, a code
  * (`confirmLoginAlertDisable`). */
-export function setLoginAlerts(enabled: boolean, password?: string): Promise<{ loginAlertEnabled: boolean } | CurrentEmailCodeSent> {
+export function setLoginAlerts(enabled: boolean, password?: string): Promise<{ loginAlertEnabled: boolean } | SecondFactorRequested> {
   return apiFetch('/api/auth/login-alerts', { method: 'PUT', body: JSON.stringify({ enabled, password }) });
 }
 
@@ -83,7 +92,7 @@ export function confirmTwoFactorEnable(code: string): Promise<{ twoFactorEnabled
 }
 
 /** The password earns a code to the account email (`confirmTwoFactorDisable`); already off, it answers so. */
-export function disableTwoFactor(password: string): Promise<{ twoFactorEnabled: boolean } | CurrentEmailCodeSent> {
+export function disableTwoFactor(password: string): Promise<{ twoFactorEnabled: boolean } | SecondFactorRequested> {
   return apiFetch('/api/auth/two-factor/disable', { method: 'POST', body: JSON.stringify({ password }) });
 }
 
@@ -201,7 +210,7 @@ export function changeUsername(username: string, password: string): Promise<{ us
 
 /** `{ ok }`: a code went to the new address (`confirmEmailChange`). With two-step login on, a code goes to the
  * current address first (`verifyEmailChangeCurrent`), which earns the one to the new address. */
-export function requestEmailChange(email: string, password: string): Promise<{ ok: true } | CurrentEmailCodeSent> {
+export function requestEmailChange(email: string, password: string): Promise<{ ok: true } | SecondFactorRequested> {
   return apiFetch('/api/auth/email/change/request', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
 
@@ -217,7 +226,7 @@ export function confirmEmailChange(email: string, code: string): Promise<{ user:
 /** Deleting your own account: with two-step login on, the password earns an emailed code first
  * (`confirmAccountDeletion`); otherwise the deletion is scheduled at once. Either way the account is then
  * signed out everywhere, this browser included. */
-export function requestAccountDeletion(password: string): Promise<{ deletionDueAt: string } | CurrentEmailCodeSent> {
+export function requestAccountDeletion(password: string): Promise<{ deletionDueAt: string } | SecondFactorRequested> {
   return apiFetch('/api/auth/account/deletion/request', { method: 'POST', body: JSON.stringify({ password }) });
 }
 
@@ -242,7 +251,7 @@ export function fetchDataExportStatus(): Promise<DataExportStatus> {
 }
 
 /** The password queues the copy, or with two-step login on earns an emailed code (`confirmDataExport`). */
-export function requestDataExport(password: string): Promise<{ export: DataExport } | CurrentEmailCodeSent> {
+export function requestDataExport(password: string): Promise<{ export: DataExport } | SecondFactorRequested> {
   return apiFetch('/api/account/data-export', { method: 'POST', body: JSON.stringify({ password }) });
 }
 

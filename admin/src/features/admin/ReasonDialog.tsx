@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/shared/ui/primitives/input';
 import { Textarea } from '@/shared/ui/primitives/textarea';
 import { REASON_MAX, REASON_MIN, describeAdminError, normalizeReasonText } from './adminErrors';
+import type { SecondFactorRequested } from './adminApi';
 
 type ReasonDialogProps = {
   open: boolean;
@@ -21,7 +22,7 @@ type ReasonDialogProps = {
 } | {
   onSubmit?: never;
   verification: {
-    requestCode: (reason: string, password: string) => Promise<{ email: string }>;
+    requestCode: (reason: string, password: string) => Promise<SecondFactorRequested>;
     onConfirm: (reason: string, code: string, confirm: string) => Promise<void>;
   };
 });
@@ -35,19 +36,20 @@ export function ReasonDialog({ open, onOpenChange, title, description, confirmLa
   const [confirm, setConfirm] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [email, setEmail] = useState<string | null>(null);
+  // set once the password earned the second step: where its code comes from
+  const [delivery, setDelivery] = useState<SecondFactorRequested | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const normalizedReason = normalizeReasonText(reason);
   const reasonOk = normalizedReason.length >= REASON_MIN && normalizedReason.length <= REASON_MAX;
   const confirmOk = !confirmText || confirm.trim().toLowerCase() === confirmText.toLowerCase();
-  const credentialsOk = !verification || (email ? /^\d{6}$/.test(code) : password.length > 0);
+  const credentialsOk = !verification || (delivery ? /^\d{6}$/.test(code) : password.length > 0);
 
   function resetVerification() {
     setPassword('');
     setCode('');
-    setEmail(null);
+    setDelivery(null);
     setError(null);
   }
 
@@ -67,9 +69,8 @@ export function ReasonDialog({ open, onOpenChange, title, description, confirmLa
     setBusy(true);
     setError(null);
     try {
-      if (verification && !email) {
-        const delivery = await verification.requestCode(normalizedReason, password);
-        setEmail(delivery.email);
+      if (verification && !delivery) {
+        setDelivery(await verification.requestCode(normalizedReason, password));
         setPassword('');
         return;
       }
@@ -92,9 +93,9 @@ export function ReasonDialog({ open, onOpenChange, title, description, confirmLa
         </DialogHeader>
         <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           <div className="flex flex-col gap-3 px-6 py-4">
-            {email ? (
+            {delivery ? (
               <>
-                <p id={deliveryHintId} className="text-label text-text-secondary">{t('dialog.codeSent', { email })}</p>
+                <p id={deliveryHintId} className="text-label text-text-secondary">{delivery.method === 'authenticator' ? t('dialog.authenticatorPrompt') : t('dialog.codeSent', { email: delivery.email })}</p>
                 <label className="flex flex-col gap-1.5 text-label text-text-muted">
                   {t('dialog.verificationCode')}
                   <Input autoFocus inputMode="numeric" autoComplete="one-time-code" aria-describedby={deliveryHintId} value={code}
@@ -125,9 +126,10 @@ export function ReasonDialog({ open, onOpenChange, title, description, confirmLa
           </div>
           <DialogFooter className="border-t border-border-divider bg-surface-raised px-6 py-4">
             <Button type="button" variant="ghost" disabled={busy} onClick={close}>{t('dialog.cancel')}</Button>
-            {email && <Button type="button" variant="secondary" disabled={busy} onClick={resetVerification}>{t('dialog.newCode')}</Button>}
-            <Button type="submit" variant={destructive && (!verification || email) ? 'destructive' : 'default'} disabled={!reasonOk || !confirmOk || !credentialsOk || busy}>
-              {busy ? t('dialog.wait') : verification && !email ? t('dialog.sendCode') : confirmLabel}
+            {/* an emailed code can be replaced; the app shows a new one by itself */}
+            {delivery && delivery.method !== 'authenticator' && <Button type="button" variant="secondary" disabled={busy} onClick={resetVerification}>{t('dialog.newCode')}</Button>}
+            <Button type="submit" variant={destructive && (!verification || delivery) ? 'destructive' : 'default'} disabled={!reasonOk || !confirmOk || !credentialsOk || busy}>
+              {busy ? t('dialog.wait') : verification && !delivery ? t('dialog.sendCode') : confirmLabel}
             </Button>
           </DialogFooter>
         </form>

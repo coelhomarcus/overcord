@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { confirmTwoFactorDisable, confirmTwoFactorEnable, disableTwoFactor, requestTwoFactorEnable } from '@/shared/api/api';
+import { codeSentTo, confirmTwoFactorDisable, confirmTwoFactorEnable, disableTwoFactor, requestTwoFactorEnable } from '@/shared/api/api';
 import type { SecurityStatus } from '@/shared/api/api';
 import { describeApiError } from '@/shared/api/errorText';
 import { OTPInput, type OTPStatus } from '@/shared/ui/motion/otp-input';
@@ -23,7 +23,8 @@ export function TwoFactorSettings({ status, onChange }: { status: SecurityStatus
   const [phase, setPhase] = useState<Phase>('idle');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [maskedEmail, setMaskedEmail] = useState('');
+  // null: the authenticator app shows the code
+  const [maskedEmail, setMaskedEmail] = useState<string | null>('');
   const [otpStatus, setOtpStatus] = useState<OTPStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -52,7 +53,7 @@ export function TwoFactorSettings({ status, onChange }: { status: SecurityStatus
         const result = await disableTwoFactor(password);
         if ('codeRequired' in result) {
           setPassword('');
-          setMaskedEmail(result.email);
+          setMaskedEmail(codeSentTo(result));
           setPhase('disable-code');
         } else {
           reset();
@@ -135,11 +136,11 @@ export function TwoFactorSettings({ status, onChange }: { status: SecurityStatus
       {(phase === 'enable-code' || phase === 'disable-code') && (
         <div className={`flex flex-col gap-3 ${SETTINGS_INLINE_PANEL}`}>
           <p className="text-label text-text-muted">
-            {phase === 'enable-code' ? t('security.twoFactor.codeSent') : t('security.twoFactor.disableCodeSent', { email: maskedEmail })}
+            {phase === 'enable-code' ? t('security.twoFactor.codeSent') : maskedEmail === null ? t('security.authenticator.prompt') : t('security.twoFactor.disableCodeSent', { email: maskedEmail })}
           </p>
           <OTPInput
             label={phase === 'enable-code' ? t('security.twoFactor.codeLabel') : t('security.twoFactor.disableCodeLabel')}
-            hint={t('security.twoFactor.codeHint')}
+            hint={phase === 'disable-code' && maskedEmail === null ? t('security.authenticator.appCodeHint') : t('security.twoFactor.codeHint')}
             errorMessage={error ?? t('security.twoFactor.codeError')}
             value={code}
             status={otpStatus}

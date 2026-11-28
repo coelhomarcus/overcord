@@ -371,7 +371,7 @@ describe('turning two-step login on and off', () => {
 
     const asked = await call('POST', '/api/auth/two-factor/disable', { cookie, payload: { password: PASSWORD } });
     assert.equal(asked.status, 200);
-    assert.deepEqual(asked.body, { codeRequired: true, email: asked.body.email });
+    assert.deepEqual(asked.body, { codeRequired: true, method: 'email', email: asked.body.email });
     assert.notEqual(asked.body.email, user.email, 'the address is masked');
     assert.deepEqual(mailbox.at(-1)?.to, [user.email]);
     assert.equal(await isOn(), true, 'the password alone leaves it on');

@@ -6,8 +6,8 @@ import { sendJson, sendError, jsonBody } from '../../http/respond.js';
 import { parseCookies, serializeCookie, clearCookie, isSecureRequest } from '../../http/cookies.js';
 import { hashPassword, verifyPassword, needsRehash, DUMMY_HASH } from './password.js';
 import {
-  CODE_SEND_RULE, codeFailuresKey, confirmPassword, issueAndSendCode, maskEmail, purposeError, rateLimitedReply, secondFactorOf, sendCurrentEmailCode,
-  verifyCurrentEmailCode, type SecondFactor,
+  CODE_SEND_RULE, codeFailuresKey, confirmPassword, issueAndSendCode, maskEmail, purposeError, rateLimitedReply, secondFactorOf,
+  sendSecondFactorChallenge, verifySecondFactor, type SecondFactor,
 } from './accountConfirmation.js';
 import { acceptSecondFactorCode, authenticatorsAvailable, authenticatorStatus } from './authenticators.js';
 import {
@@ -595,8 +595,8 @@ async function handleEmailChangeRequest(request: FastifyRequest, reply: FastifyR
     return sendError(reply, 409, 'admin_email_required', 'Peça a um operador para remover seu acesso administrativo antes de adicionar um e-mail.');
   }
   const { purpose, challengeHash } = emailChangeCodeFor(user);
-  if ((user.twoFactorEmail || user.role === 'admin') && !(await hasLiveAuthCode(user.id, purpose, email, { challengeHash }))) {
-    return sendCurrentEmailCode(reply, user, 'email_change_current');
+  if (((await secondFactorOf(user)) || user.role === 'admin') && !(await hasLiveAuthCode(user.id, purpose, email, { challengeHash }))) {
+    return sendSecondFactorChallenge(reply, user, 'email_change_current');
   }
   try {
     await issueAndSendCode(user.id, email, user.username, purpose, resolveLocale(user.locale), challengeHash);
@@ -615,7 +615,7 @@ async function handleEmailChangeVerifyCurrent(request: FastifyRequest, reply: Fa
   if (sess.email && normalizeEmail(sess.email) === email) return sendError(reply, 400, 'same_email', 'Informe um e-mail diferente do atual.');
   const user = await findById(sess.userId);
   if (!user) return sendError(reply, 404, 'user_not_found', 'Conta não encontrada.');
-  if (!(await verifyCurrentEmailCode(request, reply, { userId: user.id, email: user.email }, 'email_change_current'))) return;
+  if (!(await verifySecondFactor(request, reply, { userId: user.id, email: user.email }, 'email_change_current'))) return;
   const existing = await findByEmailLower(email);
   if (existing && existing.id !== sess.userId) return sendError(reply, 409, 'email_taken', 'Esse e-mail já está em uso.');
   const { purpose, challengeHash } = emailChangeCodeFor(user);
@@ -783,13 +783,13 @@ async function handleTwoFactorDisable(request: FastifyRequest, reply: FastifyRep
   const user = await findById(sess.userId);
   if (!user) return sendError(reply, 404, 'user_not_found', 'Conta não encontrada.');
   if (!user.twoFactorEmail) return sendJson(reply, 200, { twoFactorEnabled: false });
-  return sendCurrentEmailCode(reply, user, 'two_factor_disable');
+  return sendSecondFactorChallenge(reply, user, 'two_factor_disable');
 }
 
 async function handleTwoFactorDisableConfirm(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const sess = await sessionForRequest(request);
   if (!sess) return sendError(reply, 401, 'unauthenticated', 'Não autenticado.');
-  if (!(await verifyCurrentEmailCode(request, reply, sess, 'two_factor_disable'))) return;
+  if (!(await verifySecondFactor(request, reply, sess, 'two_factor_disable'))) return;
   await db.transaction(async (tx) => {
     await tx.update(users).set({ twoFactorEmail: false, updatedAt: new Date() }).where(eq(users.id, sess.userId));
     await destroyAdminSessionsForUser(sess.userId, tx);
@@ -812,14 +812,14 @@ async function handleLoginAlertSet(request: FastifyRequest, reply: FastifyReply)
   if (!(await confirmPassword(reply, sess, String(body.password ?? '')))) return;
   const user = await findById(sess.userId);
   if (!user) return sendError(reply, 404, 'user_not_found', 'Conta não encontrada.');
-  if (user.twoFactorEmail) return sendCurrentEmailCode(reply, user, 'login_alert_disable');
+  if (await secondFactorOf(user)) return sendSecondFactorChallenge(reply, user, 'login_alert_disable');
   return setLoginAlert(request, reply, sess, false);
 }
 
 async function handleLoginAlertDisableConfirm(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const sess = await sessionForRequest(request);
   if (!sess) return sendError(reply, 401, 'unauthenticated', 'Não autenticado.');
-  if (!(await verifyCurrentEmailCode(request, reply, sess, 'login_alert_disable'))) return;
+  if (!(await verifySecondFactor(request, reply, sess, 'login_alert_disable'))) return;
   return setLoginAlert(request, reply, sess, false);
 }
 
@@ -913,7 +913,7 @@ async function handleEndOtherSessions(request: FastifyRequest, reply: FastifyRep
   sendJson(reply, 200, { endedSessions: ended.length });
 }
 
-// ---- deleting your own account (accountDeletion.ts): password, then the emailed code with two-step login on ----
+// ---- deleting your own account (accountDeletion.ts): password, then the second factor with two-step login on ----
 
 /** Schedules the deletion and answers with its date. The account's sessions, this one included, are
  * gone, so the cookie is cleared too. */
@@ -933,14 +933,14 @@ async function handleDeletionRequest(request: FastifyRequest, reply: FastifyRepl
   if (!(await confirmPassword(reply, sess, String(jsonBody(request.body).password ?? '')))) return;
   const user = await findById(sess.userId);
   if (!user) return sendError(reply, 404, 'user_not_found', 'Conta não encontrada.');
-  if (!user.twoFactorEmail) return finishDeletionRequest(request, reply, sess);
-  return sendCurrentEmailCode(reply, user, 'account_deletion');
+  if (!(await secondFactorOf(user))) return finishDeletionRequest(request, reply, sess);
+  return sendSecondFactorChallenge(reply, user, 'account_deletion');
 }
 
 async function handleDeletionConfirm(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const sess = await sessionForRequest(request);
   if (!sess) return sendError(reply, 401, 'unauthenticated', 'Não autenticado.');
-  if (!(await verifyCurrentEmailCode(request, reply, sess, 'account_deletion'))) return;
+  if (!(await verifySecondFactor(request, reply, sess, 'account_deletion'))) return;
   return finishDeletionRequest(request, reply, sess);
 }
 

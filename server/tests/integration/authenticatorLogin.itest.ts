@@ -70,7 +70,7 @@ async function makeAccount(opts: { twoFactorEmail?: boolean } = {}) {
   return { id, username, cookie: `${config.SESSION_COOKIE}=${rawToken}` };
 }
 
-async function call(method: 'GET' | 'POST', url: string, opts: { payload?: Record<string, unknown>; cookie?: string } = {}) {
+async function call(method: 'GET' | 'POST' | 'PUT', url: string, opts: { payload?: Record<string, unknown>; cookie?: string } = {}) {
   const ip = freshIp();
   const res = await app.inject({ method, url, payload: opts.payload, remoteAddress: ip, headers: { ...(opts.cookie ? { cookie: opts.cookie } : {}), 'x-forwarded-for': ip } });
   return { status: res.statusCode, body: res.body ? JSON.parse(res.body) : null, setCookie: res.headers['set-cookie'] };
@@ -202,5 +202,51 @@ describe('turning an authenticator app off', () => {
     const first = await login(account.username);
     assert.equal((await verify(first.body.twoFactor.challenge, recoveryCodes[0]!)).body.error.code, 'invalid_code');
     assert.equal((await verify(first.body.twoFactor.challenge, fresh.body.recoveryCodes[0])).status, 200);
+  });
+});
+
+describe('confirming sensitive changes with an authenticator app', () => {
+  // two-step login by email off: the app is the account's only second factor, and nothing may skip it
+  it('asks the app, not the email, before deleting the account', async () => {
+    const account = await makeAccount();
+    const { secret } = await enroll(account);
+    mailbox = [];
+    const asked = await call('POST', '/api/auth/account/deletion/request', { cookie: account.cookie, payload: { password: PASSWORD } });
+    assert.deepEqual(asked.body, { codeRequired: true, method: 'authenticator' });
+    assert.equal(mailbox.length, 0);
+    assert.equal((await call('POST', '/api/auth/account/deletion/confirm', { cookie: account.cookie, payload: { code: '000000' } })).body.error.code, 'invalid_code');
+    const done = await call('POST', '/api/auth/account/deletion/confirm', { cookie: account.cookie, payload: { code: appCode(secret) } });
+    assert.equal(done.status, 200);
+    assert.ok(done.body.deletionDueAt);
+  });
+
+  it('asks the app before turning sign-in alerts off and before a data export', async () => {
+    const account = await makeAccount();
+    const { secret, recoveryCodes } = await enroll(account);
+    mailbox = [];
+    const alerts = await call('PUT', '/api/auth/login-alerts', { cookie: account.cookie, payload: { enabled: false, password: PASSWORD } });
+    assert.deepEqual(alerts.body, { codeRequired: true, method: 'authenticator' });
+    const off = await call('POST', '/api/auth/login-alerts/disable/confirm', { cookie: account.cookie, payload: { code: recoveryCodes[0] } });
+    assert.equal(off.body.loginAlertEnabled, false, 'a recovery code also confirms');
+
+    const exportAsked = await call('POST', '/api/account/data-export', { cookie: account.cookie, payload: { password: PASSWORD } });
+    assert.deepEqual(exportAsked.body, { codeRequired: true, method: 'authenticator' });
+    assert.equal((await call('POST', '/api/account/data-export/confirm', { cookie: account.cookie, payload: { code: appCode(secret, 5) } })).body.error.code, 'invalid_code');
+    assert.equal(mailbox.length, 0, 'no email for any of it');
+  });
+
+  it('moves the email after a code from the app instead of one to the old address', async () => {
+    const account = await makeAccount();
+    const { secret } = await enroll(account);
+    mailbox = [];
+    const email = `new_${account.username}@example.test`;
+    const asked = await call('POST', '/api/auth/email/change/request', { cookie: account.cookie, payload: { email, password: PASSWORD } });
+    assert.deepEqual(asked.body, { codeRequired: true, method: 'authenticator' });
+    assert.equal(mailbox.length, 0);
+    const verified = await call('POST', '/api/auth/email/change/verify-current', { cookie: account.cookie, payload: { email, code: appCode(secret) } });
+    assert.equal(verified.status, 200);
+    assert.deepEqual(mailbox.at(-1)?.to, [email], 'the code for the new address goes there');
+    const confirmed = await call('POST', '/api/auth/email/change/confirm', { cookie: account.cookie, payload: { email, code: lastEmailCode() } });
+    assert.equal(confirmed.status, 200);
   });
 });

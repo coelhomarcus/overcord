@@ -78,9 +78,9 @@ export async function confirmPassword(reply: FastifyReply, sess: SessionUser, pa
   return true;
 }
 
-// With two-step login on, the account's current email is its second factor, so everything that could take that
-// factor away asks it again after the password: deleting the account, turning two-step login or sign-in alerts
-// off, and moving the address. Exporting the account's data asks it too: a stolen session plus a leaked password
+// With two-step login on, the account's second factor (its authenticator app, else its current email) is asked
+// again after the password by everything that could take it away: deleting the account, turning two-step login or
+// sign-in alerts off, and moving the address. Exporting the account's data asks it too: a stolen session plus a leaked password
 // would otherwise walk off with every DM in one archive. That pair is exactly what two-step login is for.
 const CURRENT_EMAIL_CODE_SEND_KEYS = {
   account_deletion: 'deletion-code',
@@ -107,7 +107,7 @@ export async function sendCurrentEmailCode(reply: FastifyReply, user: User, purp
   } catch {
     return sendError(reply, 503, 'email_unavailable', 'Não foi possível enviar o código de verificação agora. Tente novamente mais tarde.');
   }
-  sendJson(reply, 200, { codeRequired: true, email: maskEmail(user.email) });
+  sendJson(reply, 200, { codeRequired: true, method: 'email', email: maskEmail(user.email) });
 }
 
 /** Checks the body's `code` against the last one of `purpose` sent to the current address, under the account's
@@ -165,4 +165,20 @@ export async function verifyAuthenticatorChallenge(
   }
   await ratelimit.reset(key).catch(() => {});
   return used;
+}
+
+/** The second half of a sensitive confirmation, once the password was right: a challenge the authenticator app
+ * answers when the account has one (no email goes out), else a code to the current address. */
+export async function sendSecondFactorChallenge(reply: FastifyReply, user: User, purpose: CurrentEmailPurpose, challengeHash?: string): Promise<void> {
+  if (await hasAuthenticator(user.id)) return sendAuthenticatorChallenge(reply, user, purpose, challengeHash);
+  return sendCurrentEmailCode(reply, user, purpose, challengeHash);
+}
+
+/** Checks what `sendSecondFactorChallenge` asked for: a code from the app (or a recovery code), else the emailed
+ * one. Answers the request itself (and returns false) when it is refused. */
+export async function verifySecondFactor(
+  request: FastifyRequest, reply: FastifyReply, sess: Pick<SessionUser, 'userId' | 'email'>, purpose: CurrentEmailPurpose, challengeHash?: string,
+): Promise<boolean> {
+  if (await hasAuthenticator(sess.userId)) return (await verifyAuthenticatorChallenge(request, reply, sess.userId, purpose, challengeHash)) !== null;
+  return verifyCurrentEmailCode(request, reply, sess, purpose, challengeHash);
 }

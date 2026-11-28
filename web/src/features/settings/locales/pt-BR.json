@@ -269,6 +269,7 @@
     "hide": "Ocultar",
     "add": "Adicionar",
     "currentCodeSent": "Para confirmar que é você, digite o código enviado para o e-mail atual, {{email}}. Depois enviaremos outro para {{newEmail}}.",
+    "currentAuthenticatorPrompt": "Para confirmar que é você, digite o código do seu app autenticador. Depois enviaremos um código para {{newEmail}}.",
     "currentCodeLabel": "Código do e-mail atual",
     "currentCodeAria": "Código enviado ao e-mail atual",
     "continue": "Continuar",
@@ -488,6 +489,7 @@
   },
   "security": {
     "authenticator": {
+      "prompt": "Digite o código de 6 dígitos que o seu app autenticador mostra agora.",
       "sectionDescription": "Use um app como Microsoft Authenticator ou Google Authenticator para gerar o código pedido ao entrar. É mais seguro que o código por e-mail.",
       "label": "App autenticador",
       "descriptionOff": "Desativado. Com ele ativo, entrar com a senha pede o código do app, e o e-mail deixa de servir como segundo fator.",
