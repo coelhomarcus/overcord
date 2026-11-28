@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { attachments, dataExports, messages, serverMembers, servers, users } from '../../db/schema.js';
+import { attachments, dataExports, messages, serverMembers, servers, sessions, users } from '../../db/schema.js';
 import { destroyAdminSessionsForUser, destroyAllSessionsForUser, invalidateSessionsForUser } from '../auth/session.js';
 import { broadcastToKnownPeers, listOnlineUserIds, participants, sendToUser } from '../presence/participants.js';
 import { deleteAvatarFile } from '../attachments/attachmentCleanup.js';
@@ -13,6 +13,7 @@ import { deleteServerCompletely } from '../servers/serverDeletion.js';
 import { countServerMembers } from '../servers/serversRepository.js';
 import { SOCIAL_PAGE_SIZE, decodeTimeCursor, encodeTimeCursor } from '../friendships/cursor.js';
 import { dropUserConnections } from './accountEnforcement.js';
+import { CLI_ACTOR_ID, lockActingAdmin } from './adminActor.js';
 import { decideAdminRoleChange, decideUserAction, pickSuccessor, type AdminRoleAction, type AdminRoleDecision, type UserActionDecision } from './adminPolicy.js';
 import { listAudit, recordAudit, recordAuditFailure, type AuditActor } from './auditLog.js';
 import { logger } from '../../lib/logger.js';
@@ -31,8 +32,6 @@ interface AdminTargetCheck { adminConfirmed?: boolean }
 
 const needsAdminConfirmation = (target: { id: string; role: string }, actorId: string, { adminConfirmed = false }: AdminTargetCheck) =>
   target.role === 'admin' && target.id !== actorId && !adminConfirmed;
-
-export const CLI_ACTOR_ID = 'cli';
 
 interface Ctx { actor: AuditActor; reason: string; requestId: string }
 /** The account deletion the person asked for runs from a sweep, with no one acting: `actor` is null. */
@@ -127,12 +126,18 @@ export async function reactivateUser(ctx: Ctx, targetId: string): Promise<UserAc
 
 /** Ends every session of the account without suspending it. */
 export async function revokeUserSessions(ctx: Ctx, targetId: string): Promise<UserActionResult> {
-  const [target] = await db.select({ username: users.username }).from(users).where(eq(users.id, targetId)).limit(1);
-  if (!target) return { code: 'not_found' };
-  await destroyAllSessionsForUser(targetId);
+  const outcome = await db.transaction(async (tx): Promise<UserActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
+    const [target] = await tx.select({ username: users.username }).from(users).where(eq(users.id, targetId)).limit(1);
+    if (!target) return { code: 'not_found' };
+    await tx.delete(sessions).where(eq(sessions.userId, targetId));
+    await recordAudit({ actor: ctx.actor, action: 'user.revoke_sessions', targetType: 'user', targetId, targetLabel: target.username, reason: ctx.reason, requestId: ctx.requestId }, tx);
+    return { code: 'ok' };
+  });
+  if (outcome.code !== 'ok') return outcome;
+  invalidateSessionsForUser(targetId);
   dropUserConnections(targetId);
-  await recordAudit({ actor: ctx.actor, action: 'user.revoke_sessions', targetType: 'user', targetId, targetLabel: target.username, reason: ctx.reason, requestId: ctx.requestId });
-  return { code: 'ok' };
+  return outcome;
 }
 
 export type BadgeActionResult = { code: 'ok' } | { code: 'not_found' | 'forbidden' | 'already_held' | 'not_held' };

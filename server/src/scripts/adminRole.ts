@@ -1,6 +1,7 @@
 import { pool } from '../db/client.js';
 import { findByUsernameLower } from '../modules/users/users.js';
-import { CLI_ACTOR_ID, setAdminRole } from '../modules/admin/adminUsers.js';
+import { CLI_ACTOR_ID } from '../modules/admin/adminActor.js';
+import { setAdminRole } from '../modules/admin/adminUsers.js';
 
 // `bun run admin:grant <username>` / `bun run admin:revoke <username>`
 //

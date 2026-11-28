@@ -1,6 +1,6 @@
 import { db, pool } from '../db/client.js';
 import { recordAudit } from '../modules/admin/auditLog.js';
-import { CLI_ACTOR_ID } from '../modules/admin/adminUsers.js';
+import { CLI_ACTOR_ID } from '../modules/admin/adminActor.js';
 import { removeAuthenticator } from '../modules/auth/authenticators.js';
 import { destroyAdminSessionsForUser } from '../modules/auth/session.js';
 import { findByUsernameLower } from '../modules/users/users.js';

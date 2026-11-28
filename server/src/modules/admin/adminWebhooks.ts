@@ -4,6 +4,7 @@ import { conversations, servers, webhooks } from '../../db/schema.js';
 import { SOCIAL_PAGE_SIZE, decodeTimeCursor, encodeTimeCursor } from '../friendships/cursor.js';
 import { generateWebhookToken, hashWebhookToken } from '../bots/webhooksRepository.js';
 import { recordAudit, listAudit, type AuditActor } from './auditLog.js';
+import { lockActingAdmin } from './adminActor.js';
 import { logger } from '../../lib/logger.js';
 
 const log = logger.child({ component: 'admin' });
@@ -60,13 +61,14 @@ export async function getAdminWebhook(webhookId: string) {
   return { webhook: row, history: history === 'invalid_cursor' ? [] : history.items };
 }
 
-export type WebhookActionResult = { code: 'ok' } | { code: 'not_found' };
+export type WebhookActionResult = { code: 'ok' } | { code: 'not_found' | 'forbidden' };
 
 /** Cuts a leaking or misbehaving sender off at once: the token is replaced by
  * one nobody is ever shown, so its URL stops working and only someone who
  * manages the channel generating a new one brings it back. */
 export async function revokeWebhook(ctx: Ctx, webhookId: string): Promise<WebhookActionResult> {
   return db.transaction(async (tx): Promise<WebhookActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
     const [updated] = await tx.update(webhooks)
       .set({ tokenHash: hashWebhookToken(generateWebhookToken()), tokenRotatedAt: new Date() })
       .where(eq(webhooks.id, webhookId))
