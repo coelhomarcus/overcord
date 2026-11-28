@@ -186,7 +186,9 @@ export async function serveUpload(request: FastifyRequest<{ Params: { id: string
   const inline = INLINE_MIME_TYPES.has(row.mimeType);
   const contentType = inline ? row.mimeType : 'application/octet-stream';
   const disposition = contentDispositionFor(inline ? 'inline' : 'attachment', row.fileName);
-  const { cacheControl, etag } = adminOrigin ? { cacheControl: 'private, no-store', etag: null } : policy;
+  // The admin host serves profile images only, and their ids never change content: the immutable
+  // policy keeps a list of avatars from downloading again on every page the administrator opens.
+  const { cacheControl, etag } = policy;
   if (etag) reply.header('ETag', etag);
 
   // Range requests are what let <video>/<audio> seek at all — without
