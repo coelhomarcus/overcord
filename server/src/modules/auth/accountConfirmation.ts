@@ -6,7 +6,8 @@ import { logger } from '../../lib/logger.js';
 import type { SessionUser } from '../../types.js';
 import { resolveLocale } from '../users/locale.js';
 import { findById } from '../users/users.js';
-import { issueAuthCode, verifyAuthCode, type AuthCodePurpose } from './codes.js';
+import { issueAuthChallenge, issueAuthCode, verifyAuthChallenge, verifyAuthCode, type AuthCodePurpose, type ChallengePurpose } from './codes.js';
+import { acceptSecondFactorCode, hasAuthenticator } from './authenticators.js';
 import { isEmailDeliveryConfigured, sendAuthCodeEmail } from './email.js';
 import { verifyPassword } from './password.js';
 import * as ratelimit from './ratelimit.js';
@@ -90,6 +91,7 @@ const CURRENT_EMAIL_CODE_SEND_KEYS = {
   admin_role_change: 'admin-role-code',
   admin_backup: 'admin-backup-code',
   admin_account_action: 'admin-account-code',
+  authenticator_setup: 'authenticator-setup-code',
 } as const satisfies Partial<Record<AuthCodePurpose, string>>;
 export type CurrentEmailPurpose = keyof typeof CURRENT_EMAIL_CODE_SEND_KEYS;
 
@@ -126,4 +128,41 @@ export async function verifyCurrentEmailCode(request: FastifyRequest, reply: Fas
   }
   await ratelimit.reset(key).catch(() => {});
   return true;
+}
+
+/** What an account proves after its password: its authenticator app when one is on, which then replaces the email;
+ * else its email when two-step login by email is on; else nothing. */
+export type SecondFactor = 'authenticator' | 'email';
+
+export async function secondFactorOf(user: Pick<User, 'id' | 'twoFactorEmail'>): Promise<SecondFactor | null> {
+  if (await hasAuthenticator(user.id)) return 'authenticator';
+  return user.twoFactorEmail ? 'email' : null;
+}
+
+/** Starts a challenge the account's authenticator app answers (no email goes out) and answers
+ * `{ codeRequired, method }`. Only called once the password was confirmed, so passing it stands for both. */
+export async function sendAuthenticatorChallenge(reply: FastifyReply, user: Pick<User, 'id' | 'email'>, purpose: ChallengePurpose, challengeHash?: string): Promise<void> {
+  await issueAuthChallenge(user.id, purpose, user.email ?? '', { challengeHash });
+  sendJson(reply, 200, { codeRequired: true, method: 'authenticator' });
+}
+
+/** Checks the body's `code`, from the app or a recovery code, against the latest challenge of `purpose`, under the
+ * account's counter of wrong codes. Returns which of the two passed, or null after answering the refusal. */
+export async function verifyAuthenticatorChallenge(
+  request: FastifyRequest, reply: FastifyReply, userId: string, purpose: ChallengePurpose, challengeHash?: string,
+): Promise<'authenticator' | 'recovery_code' | null> {
+  const code = String(jsonBody(request.body).code ?? '').trim();
+  if (!code || code.length > 32) { sendError(reply, 400, 'invalid_code', 'Informe o código do app autenticador.'); return null; }
+  const key = codeFailuresKey(userId);
+  const blocked = await ratelimit.checkBlocked(key);
+  if (blocked) { rateLimitedReply(reply, blocked); return null; }
+  let used: 'authenticator' | 'recovery_code' | null = null;
+  const result = await verifyAuthChallenge(userId, purpose, async () => (used = await acceptSecondFactorCode(userId, code)) !== null, { challengeHash });
+  if (!result.ok) {
+    if (result.reason !== 'code_expired') await ratelimit.recordFailure(key);
+    purposeError(reply, result.reason);
+    return null;
+  }
+  await ratelimit.reset(key).catch(() => {});
+  return used;
 }

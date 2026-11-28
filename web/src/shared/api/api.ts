@@ -52,6 +52,8 @@ export interface SecurityStatus {
   hasEmail: boolean;
   /** days without use after which a session ends; 0 = never */
   sessionIdleDays: number;
+  /** missing from a server older than authenticator apps; `available` is false without TOTP_ENCRYPTION_KEY */
+  authenticator?: { available: boolean; enabled: boolean; recoveryCodesLeft: number };
 }
 
 export function fetchSecurityStatus(): Promise<SecurityStatus> {
@@ -87,6 +89,40 @@ export function disableTwoFactor(password: string): Promise<{ twoFactorEnabled: 
 
 export function confirmTwoFactorDisable(code: string): Promise<{ twoFactorEnabled: boolean }> {
   return apiFetch('/api/auth/two-factor/disable/confirm', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+/** A new key for the authenticator app (`uri` goes in the QR code), or first a code to the account email when
+ * two-step login by email is on (`verifyAuthenticatorSetupEmail`). */
+export interface AuthenticatorSetup { secret: string; uri: string }
+export function startAuthenticatorSetup(password: string): Promise<AuthenticatorSetup | CurrentEmailCodeSent> {
+  return apiFetch('/api/auth/authenticator/setup', { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+export function verifyAuthenticatorSetupEmail(code: string): Promise<AuthenticatorSetup> {
+  return apiFetch('/api/auth/authenticator/setup/verify', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+/** A code from the app turns it on; the recovery codes are only ever shown in this answer. */
+export function confirmAuthenticatorSetup(code: string): Promise<{ recoveryCodes: string[] }> {
+  return apiFetch('/api/auth/authenticator/confirm', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+/** The password earns a challenge the app (or a recovery code) answers. */
+export function requestAuthenticatorDisable(password: string): Promise<{ codeRequired: true; method: 'authenticator' }> {
+  return apiFetch('/api/auth/authenticator/disable', { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+export function confirmAuthenticatorDisable(code: string): Promise<{ authenticatorEnabled: false }> {
+  return apiFetch('/api/auth/authenticator/disable/confirm', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+export function requestRecoveryCodes(password: string): Promise<{ codeRequired: true; method: 'authenticator' }> {
+  return apiFetch('/api/auth/authenticator/recovery-codes', { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+/** A new set of recovery codes; the earlier ones stop working. */
+export function confirmRecoveryCodes(code: string): Promise<{ recoveryCodes: string[] }> {
+  return apiFetch('/api/auth/authenticator/recovery-codes/confirm', { method: 'POST', body: JSON.stringify({ code }) });
 }
 
 /** Keeps this session and ends every other one. */

@@ -43,10 +43,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return body as T;
 }
 
-export interface LoginChallenge {
-  challenge: string;
-  /** the account email, masked (`a***@example.com`) */
-  email: string;
-}
+/** The second step of a login: a code emailed to the account, or one its authenticator app shows. A server
+ * older than authenticator apps sends no `method`, which means email. */
+export type LoginChallenge =
+  | { challenge: string; method?: 'email'; /** the account email, masked (`a***@example.com`) */ email: string }
+  | { challenge: string; method: 'authenticator' };
 
 /** `deletionCancelled`: this sign-in cancelled the account's scheduled deletion. */

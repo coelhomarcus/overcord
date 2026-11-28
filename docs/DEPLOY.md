@@ -31,7 +31,7 @@ Start with [`.env.example`](../.env.example) and set the values for your product
 | `REGISTRATION_CODE` | Empty means nobody can sign up. Set a code and share it with the people you invite. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | The URL browsers really use to reach LiveKit (`wss://…`). The CSP only lets the browser connect there. |
 
-For optional settings, copy the entries you need from [`.env.optional.example`](../.env.optional.example) and uncomment them. Configure [Resend](INTEGRATIONS.md#resend) for password recovery and two-step login, and [Web Push](INTEGRATIONS.md#web-push) for browser push notifications.
+For optional settings, copy the entries you need from [`.env.optional.example`](../.env.optional.example) and uncomment them. Configure [Resend](INTEGRATIONS.md#resend) for password recovery and two-step login, and [Web Push](INTEGRATIONS.md#web-push) for browser push notifications. Set `TOTP_ENCRYPTION_KEY` (`openssl rand -base64 32`) to offer two-step login with an authenticator app. It seals each app's secret in the database and is not part of [backups](#backups), so keep it with your other secrets: without it, or with a different one, every account's authenticator stops working and its owner signs in with a recovery code.
 
 After the first start, follow [administrator provisioning](#administration-site) to set up the first account.
 

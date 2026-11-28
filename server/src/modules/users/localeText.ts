@@ -28,6 +28,7 @@ type TextKey =
   | 'email.adminRoleSubject' | 'email.adminRoleTitle' | 'email.adminRoleIntro'
   | 'email.adminBackupSubject' | 'email.adminBackupTitle' | 'email.adminBackupIntro'
   | 'email.adminAccountSubject' | 'email.adminAccountTitle' | 'email.adminAccountIntro'
+  | 'email.authenticatorSetupSubject' | 'email.authenticatorSetupTitle' | 'email.authenticatorSetupIntro'
   | 'server.textCategory' | 'server.textChannel' | 'server.voiceCategory' | 'server.voiceChannel';
 
 const TEXT: Record<Locale, Record<TextKey, string>> = {
@@ -96,6 +97,8 @@ const TEXT: Record<Locale, Record<TextKey, string>> = {
     'email.adminBackupIntro': 'Use este código no painel para confirmar o download do backup completo (banco de dados e arquivos) pedido por "{{username}}". Se não foi você, troque sua senha agora:',
     'email.adminAccountSubject': 'Confirme a ação sobre outro administrador', 'email.adminAccountTitle': 'Ação sobre um administrador',
     'email.adminAccountIntro': 'Use este código no painel para confirmar a suspensão ou exclusão de outro administrador pedida por "{{username}}". Se não foi você, troque sua senha agora:',
+    'email.authenticatorSetupSubject': 'Confirme o app autenticador da sua conta', 'email.authenticatorSetupTitle': 'App autenticador',
+    'email.authenticatorSetupIntro': 'Use este código para cadastrar um app autenticador na conta "{{username}}". Depois disso, o login pedirá o código do app em vez deste e-mail. Se não foi você, troque sua senha agora:',
     'server.textCategory': 'Canais de texto', 'server.textChannel': 'geral',
     'server.voiceCategory': 'Canais de voz', 'server.voiceChannel': 'Geral',
   },
@@ -164,6 +167,8 @@ const TEXT: Record<Locale, Record<TextKey, string>> = {
     'email.adminBackupIntro': 'Use this code in the administration site to confirm the full backup download (database and files) requested by "{{username}}". If it was not you, change your password now:',
     'email.adminAccountSubject': 'Confirm the action on another administrator', 'email.adminAccountTitle': 'Action on an administrator',
     'email.adminAccountIntro': 'Use this code in the administration site to confirm the suspension or deletion of another administrator requested by "{{username}}". If it was not you, change your password now:',
+    'email.authenticatorSetupSubject': 'Confirm the authenticator app for your account', 'email.authenticatorSetupTitle': 'Authenticator app',
+    'email.authenticatorSetupIntro': 'Use this code to set up an authenticator app on the account "{{username}}". After that, signing in asks for the app\'s code instead of this email. If it was not you, change your password now:',
     'server.textCategory': 'Text Channels', 'server.textChannel': 'general',
     'server.voiceCategory': 'Voice Channels', 'server.voiceChannel': 'General',
   },

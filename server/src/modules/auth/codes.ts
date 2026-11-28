@@ -15,7 +15,11 @@ import { normalizeEmail } from '../users/users.js';
 export type AuthCodePurpose =
   | 'password_reset' | 'email_change' | 'email_change_current' | 'two_factor_setup' | 'two_factor_disable'
   | 'login' | 'login_alert_disable' | 'account_deletion' | 'data_export' | 'admin_role_change' | 'admin_email_change' | 'admin_backup'
-  | 'admin_account_action';
+  | 'admin_account_action' | 'authenticator_setup';
+
+/** What an authenticator-app challenge can stand for. It is a row like an emailed code's, but no code is
+ * sent: the row records that the password was confirmed for this action and bounds the app codes tried. */
+export type ChallengePurpose = AuthCodePurpose | 'authenticator_disable' | 'recovery_codes_reset';
 
 interface CodeScope {
   /** Binds the code to the login or sensitive action that requested it. */
@@ -63,6 +67,63 @@ export async function issueAuthCode(
     expiresAt: new Date(Date.now() + ttlMs),
   });
   return code;
+}
+
+/** A challenge whose proof is a code from the account's authenticator app rather than an emailed one. Like
+ * `issueAuthCode`, it replaces an earlier live challenge of the same purpose and scope. Its code hash is random,
+ * so no six digits can ever pass it through `verifyAuthCode`. */
+export async function issueAuthChallenge(
+  userId: string,
+  purpose: ChallengePurpose,
+  email: string,
+  { ttlMs = config.AUTH_CODE_TTL_MS, ...scope }: CodeScope & { ttlMs?: number } = {},
+): Promise<void> {
+  await db.update(authCodes)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(authCodes.userId, userId), eq(authCodes.purpose, purpose), isNull(authCodes.consumedAt), scopeOf(scope)));
+  await db.insert(authCodes).values({
+    id: crypto.randomUUID(),
+    userId,
+    purpose,
+    email: normalizeEmail(email),
+    codeHash: crypto.randomBytes(32).toString('hex'),
+    challengeHash: scope.challengeHash ?? null,
+    expiresAt: new Date(Date.now() + ttlMs),
+  });
+}
+
+/** Answers the latest live challenge of this purpose and scope with `check` (a code from the app, see
+ * authenticators.ts). One attempt is spent BEFORE `check` runs, so a challenge out of tries never spends a
+ * recovery code; a pass consumes the challenge, and only one request can win it. */
+export async function verifyAuthChallenge(
+  userId: string,
+  purpose: ChallengePurpose,
+  check: () => Promise<boolean>,
+  scope: CodeScope = {},
+): Promise<VerifyCodeResult> {
+  const [record] = await db.select().from(authCodes)
+    .where(and(eq(authCodes.userId, userId), eq(authCodes.purpose, purpose), isNull(authCodes.consumedAt), scopeOf(scope)))
+    .orderBy(desc(authCodes.createdAt))
+    .limit(1);
+  if (!record) return { ok: false, reason: 'invalid_code' };
+  if (record.expiresAt.getTime() <= Date.now()) {
+    await db.update(authCodes).set({ consumedAt: new Date() }).where(and(eq(authCodes.id, record.id), isNull(authCodes.consumedAt)));
+    return { ok: false, reason: 'code_expired' };
+  }
+  const [claimed] = await db.update(authCodes)
+    .set({ attempts: sql`${authCodes.attempts} + 1` })
+    .where(and(eq(authCodes.id, record.id), isNull(authCodes.consumedAt), lt(authCodes.attempts, config.AUTH_CODE_MAX_ATTEMPTS)))
+    .returning({ attempts: authCodes.attempts });
+  if (!claimed) return { ok: false, reason: 'too_many_attempts' };
+
+  if (await check()) {
+    const [won] = await db.update(authCodes).set({ consumedAt: new Date() })
+      .where(and(eq(authCodes.id, record.id), isNull(authCodes.consumedAt))).returning({ id: authCodes.id });
+    return won ? { ok: true, id: record.id } : { ok: false, reason: 'invalid_code' };
+  }
+  if (claimed.attempts < config.AUTH_CODE_MAX_ATTEMPTS) return { ok: false, reason: 'invalid_code' };
+  await db.update(authCodes).set({ consumedAt: new Date() }).where(and(eq(authCodes.id, record.id), isNull(authCodes.consumedAt)));
+  return { ok: false, reason: 'too_many_attempts' };
 }
 
 export async function verifyAuthCode(

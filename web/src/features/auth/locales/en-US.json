@@ -93,6 +93,13 @@
     "confirmFailed": "Couldn't link the email."
   },
   "twoFactor": {
+    "authenticatorSubtitle": "Open your authenticator app and type the 6-digit Overcord code.",
+    "authenticatorHint": "The code changes every 30 seconds.",
+    "useRecoveryCode": "Use a recovery code",
+    "useAuthenticator": "Use the authenticator app",
+    "recoverySubtitle": "Type one of the recovery codes you saved. Each works only once.",
+    "recoveryLabel": "Recovery code",
+    "recoveryHint": "In the form xxxxx-xxxxx.",
     "title": "Two-step verification",
     "sentTo": "We sent a code to {{email}}. It expires in 10 minutes.",
     "codeLabel": "Verification code",

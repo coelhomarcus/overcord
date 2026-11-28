@@ -6,9 +6,10 @@ import { sendJson, sendError, jsonBody } from '../../http/respond.js';
 import { parseCookies, serializeCookie, clearCookie, isSecureRequest } from '../../http/cookies.js';
 import { hashPassword, verifyPassword, needsRehash, DUMMY_HASH } from './password.js';
 import {
-  CODE_SEND_RULE, codeFailuresKey, confirmPassword, issueAndSendCode, maskEmail, purposeError, rateLimitedReply, sendCurrentEmailCode,
-  verifyCurrentEmailCode,
+  CODE_SEND_RULE, codeFailuresKey, confirmPassword, issueAndSendCode, maskEmail, purposeError, rateLimitedReply, secondFactorOf, sendCurrentEmailCode,
+  verifyCurrentEmailCode, type SecondFactor,
 } from './accountConfirmation.js';
+import { acceptSecondFactorCode, authenticatorsAvailable, authenticatorStatus } from './authenticators.js';
 import {
   ADMIN_SESSION_SECONDS, createSession, resolveSession, destroySession, destroyAdminSessionsForUser, destroyOtherSessions, destroySessionById, listSessionsForUser,
   type SessionScope,
@@ -23,7 +24,7 @@ import { renameParticipants } from '../presence/participants.js';
 import { checkRegistrationAllowed } from './registrationLimits.js';
 import { sanitizeDisplayName } from '../profile/sanitize.js';
 import type { User } from '../../db/schema.js';
-import { consumeLoginChallenge, findLoginChallenge, hasLiveAuthCode, verifyAuthCode } from './codes.js';
+import { consumeLoginChallenge, findLoginChallenge, hasLiveAuthCode, issueAuthChallenge, verifyAuthChallenge, verifyAuthCode } from './codes.js';
 import { isEmailDeliveryConfigured, sendEmailChangedEmail, sendPasswordChangedEmail } from './email.js';
 import { isKnownBrowser, KNOWN_LOGIN_SECONDS, noticeLogin, noticeRegistration, rememberBrowser } from './loginAlert.js';
 import { cancelScheduledDeletion, isPastDeletion, scheduleAccountDeletion } from './accountDeletion.js';
@@ -254,7 +255,8 @@ async function handleLogin(request: FastifyRequest, reply: FastifyReply, scope: 
       .catch(() => {});
   }
 
-  if (user.twoFactorEmail) return startLoginChallenge(reply, user, scope);
+  const factor = await secondFactorOf(user);
+  if (factor) return startLoginChallenge(reply, user, scope, factor);
   return finishLogin(request, reply, user, scope);
 }
 
@@ -292,10 +294,16 @@ function accountDeletedError(reply: FastifyReply): void {
   sendError(reply, 403, 'account_deleted', 'Esta conta foi excluída a pedido do titular.');
 }
 
-/** The right password with two-step login on: no session yet, a code to the account's email and a
- * challenge the browser holds until it sends the code back. Only reachable with the right password,
- * so the answer reveals nothing about which accounts exist. */
-async function startLoginChallenge(reply: FastifyReply, user: User, scope: SessionScope): Promise<void> {
+/** The right password with two-step login on: no session yet, a challenge the browser holds until it sends the
+ * code back, and (by email) a code to the account's address. With an authenticator app nothing is sent: the app
+ * shows the code. Only reachable with the right password, so the answer reveals nothing about which accounts exist. */
+async function startLoginChallenge(reply: FastifyReply, user: User, scope: SessionScope, factor: SecondFactor): Promise<void> {
+  if (factor === 'authenticator') {
+    const challenge = crypto.randomBytes(32).toString('base64url');
+    await issueAuthChallenge(user.id, 'login', user.email ?? '', { challengeHash: hashChallenge(challenge, scope), ttlMs: config.LOGIN_CODE_TTL_MS });
+    log.info('login waiting for the authenticator code', { userId: user.id });
+    return sendJson(reply, 200, { twoFactor: { challenge, method: 'authenticator' } });
+  }
   if (!user.email || !isEmailDeliveryConfigured()) {
     log.error('two-step login cannot send its code', { userId: user.id, hasEmail: Boolean(user.email) });
     return sendError(reply, 503, 'email_unavailable', 'Não foi possível enviar o código de verificação agora. Tente novamente mais tarde.');
@@ -310,10 +318,10 @@ async function startLoginChallenge(reply: FastifyReply, user: User, scope: Sessi
     return sendError(reply, 503, 'email_unavailable', 'Não foi possível enviar o código de verificação agora. Tente novamente mais tarde.');
   }
   log.info('login waiting for its emailed code', { userId: user.id });
-  sendJson(reply, 200, { twoFactor: { challenge, email: maskEmail(user.email) } });
+  sendJson(reply, 200, { twoFactor: { challenge, method: 'email', email: maskEmail(user.email) } });
 }
 
-type ChallengeLookup = { user: User; challengeHash: string } | { refused: true };
+type ChallengeLookup = { user: User; challengeHash: string; factor: SecondFactor } | { refused: true };
 
 /** Resolves the challenge of a login's second step, answering the request itself when it cannot go on. */
 async function loginChallengeFor(request: FastifyRequest, reply: FastifyReply, challenge: string, scope: SessionScope): Promise<ChallengeLookup> {
@@ -330,7 +338,8 @@ async function loginChallengeFor(request: FastifyRequest, reply: FastifyReply, c
   const found = await findLoginChallenge(challengeHash);
   if (!found || found.startedAt.getTime() + LOGIN_CHALLENGE_MAX_MS < Date.now()) return expired();
   const user = await findById(found.userId);
-  if (!user || !user.email || !user.twoFactorEmail) return expired();
+  const factor = user ? await secondFactorOf(user) : null;
+  if (!user || !factor || (factor === 'email' && !user.email)) return expired();
   if (user.status !== 'active') {
     sendError(reply, 403, 'account_unavailable', 'Esta conta está indisponível. Fale com a administração.');
     return { refused: true };
@@ -343,7 +352,7 @@ async function loginChallengeFor(request: FastifyRequest, reply: FastifyReply, c
     sendError(reply, 403, 'forbidden', 'Apenas administradores.');
     return { refused: true };
   }
-  return { user, challengeHash };
+  return { user, challengeHash, factor };
 }
 
 async function handleLoginVerify(request: FastifyRequest, reply: FastifyReply, scope: SessionScope = 'app'): Promise<void> {
@@ -352,14 +361,20 @@ async function handleLoginVerify(request: FastifyRequest, reply: FastifyReply, s
   const code = String(body.code == null ? '' : body.code).trim();
   const lookup = await loginChallengeFor(request, reply, challenge, scope);
   if ('refused' in lookup) return;
-  const { user, challengeHash } = lookup;
-  if (!/^\d{6}$/.test(code)) return sendError(reply, 400, 'invalid_code', 'Informe o código de 6 dígitos.');
+  const { user, challengeHash, factor } = lookup;
+  // an authenticator account also takes one of its recovery codes here
+  if (factor === 'email' ? !/^\d{6}$/.test(code) : !code || code.length > 32) {
+    return sendError(reply, 400, 'invalid_code', factor === 'email' ? 'Informe o código de 6 dígitos.' : 'Informe o código do app autenticador.');
+  }
 
   const userKey = codeFailuresKey(user.id);
   const blocked = await ratelimit.checkBlocked(userKey);
   if (blocked) return rateLimitedReply(reply, blocked);
 
-  const result = await verifyAuthCode(user.id, 'login', user.email!, code, { challengeHash });
+  let via: 'authenticator' | 'recovery_code' | null = null;
+  const result = factor === 'email'
+    ? await verifyAuthCode(user.id, 'login', user.email!, code, { challengeHash })
+    : await verifyAuthChallenge(user.id, 'login', async () => (via = await acceptSecondFactorCode(user.id, code)) !== null, { challengeHash });
   if (!result.ok) {
     if (result.reason === 'invalid_code' || result.reason === 'too_many_attempts') {
       await ratelimit.recordFailure(`ip:${rateLimitSubjectOf(request)}`);
@@ -371,6 +386,9 @@ async function handleLoginVerify(request: FastifyRequest, reply: FastifyReply, s
 
   await consumeLoginChallenge(challengeHash);
   await ratelimit.reset(userKey).catch(() => {});
+  if (via === 'recovery_code') {
+    await recordAudit({ actor: { id: user.id, username: user.username }, action: 'account.recovery_code_login', targetType: 'user', targetId: user.id, targetLabel: user.username, requestId: request.id });
+  }
   await finishLogin(request, reply, user, scope, true);
 }
 
@@ -378,7 +396,8 @@ async function handleLoginResend(request: FastifyRequest, reply: FastifyReply, s
   const body = jsonBody(request.body);
   const lookup = await loginChallengeFor(request, reply, String(body.challenge == null ? '' : body.challenge), scope);
   if ('refused' in lookup) return;
-  const { user, challengeHash } = lookup;
+  const { user, challengeHash, factor } = lookup;
+  if (factor === 'authenticator') return sendError(reply, 409, 'conflict', 'Este login usa o código do app autenticador.');
   const send = await ratelimit.consume(`login-code:${user.id}`, CODE_SEND_RULE);
   if (!send.allowed) return rateLimitedReply(reply, send.retryAfterSec, 'Muitos códigos enviados. Tente novamente mais tarde.');
   try {
@@ -712,6 +731,7 @@ async function handleSecurityStatus(request: FastifyRequest, reply: FastifyReply
     emailDeliveryAvailable: isEmailDeliveryConfigured(),
     hasEmail: Boolean(user.email),
     sessionIdleDays: config.SESSION_IDLE_DAYS,
+    authenticator: { available: authenticatorsAvailable(), ...(await authenticatorStatus(user.id)) },
   });
 }
 

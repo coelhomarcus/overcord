@@ -30,8 +30,10 @@ export function TwoFactorSettings({ status, onChange }: { status: SecurityStatus
   const confirmingRef = useRef(false);
 
   const unavailable = !status.emailDeliveryAvailable ? 'noDelivery' : !status.hasEmail ? 'noEmail' : null;
+  // an authenticator app replaces the email as the second factor: the switch would change nothing
+  const replaced = status.authenticator?.enabled === true;
   // turning it off stays possible even when it could not be turned on again
-  const switchDisabled = pending || phase !== 'idle' || (unavailable !== null && !status.twoFactorEnabled);
+  const switchDisabled = replaced || pending || phase !== 'idle' || (unavailable !== null && !status.twoFactorEnabled);
 
   function reset() {
     setPhase('idle');
@@ -94,7 +96,7 @@ export function TwoFactorSettings({ status, onChange }: { status: SecurityStatus
         label={t('security.twoFactor.label')}
         description={status.twoFactorEnabled ? t('security.twoFactor.descriptionOn') : t('security.twoFactor.descriptionOff')}
         htmlFor="twoFactorSwitch"
-        disabled={unavailable !== null && !status.twoFactorEnabled}
+        disabled={replaced || (unavailable !== null && !status.twoFactorEnabled)}
       >
         <Switch
           id="twoFactorSwitch"
@@ -105,7 +107,8 @@ export function TwoFactorSettings({ status, onChange }: { status: SecurityStatus
           onCheckedChange={(checked) => { setError(null); setPhase(checked ? 'enable-password' : 'disable-password'); }}
         />
       </SettingsRow>
-      {unavailable && !status.twoFactorEnabled && (
+      {replaced && <SettingsNotice tone="info">{t('security.twoFactor.replacedByAuthenticator')}</SettingsNotice>}
+      {!replaced && unavailable && !status.twoFactorEnabled && (
         <SettingsNotice tone="info">{t(`security.twoFactor.unavailable.${unavailable}`)}</SettingsNotice>
       )}
       {(phase === 'enable-password' || phase === 'disable-password') && (

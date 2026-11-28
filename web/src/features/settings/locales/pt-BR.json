@@ -46,6 +46,7 @@
       "timeFormat": "Formato de tempo",
       "presence": "Status",
       "password": "Senha",
+      "authenticator": "App autenticador",
       "twoFactor": "Verificação em duas etapas",
       "loginAlerts": "Avisos de login",
       "sessions": "Sessões ativas",
@@ -59,6 +60,7 @@
     }
   },
   "search": {
+    "authenticator": {"title": "App autenticador", "keywords": "autenticador, microsoft authenticator, google authenticator, totp, código, duas etapas, 2fa, códigos de recuperação"},
     "accountInfo": {
       "title": "Informações da conta",
       "keywords": "nome de usuário, username, trocar nome de usuário, nome de exibição, admin, conta"
@@ -485,6 +487,45 @@
     }
   },
   "security": {
+    "authenticator": {
+      "sectionDescription": "Use um app como Microsoft Authenticator ou Google Authenticator para gerar o código pedido ao entrar. É mais seguro que o código por e-mail.",
+      "label": "App autenticador",
+      "descriptionOff": "Desativado. Com ele ativo, entrar com a senha pede o código do app, e o e-mail deixa de servir como segundo fator.",
+      "descriptionOn_one": "Ativado. Entrar pede o código do app. Resta {{count}} código de recuperação.",
+      "descriptionOn_other": "Ativado. Entrar pede o código do app. Restam {{count}} códigos de recuperação.",
+      "unavailable": "Este servidor não oferece app autenticador. Peça à administração para configurar TOTP_ENCRYPTION_KEY.",
+      "fewRecoveryCodes_one": "Resta só {{count}} código de recuperação. Gere novos antes de ficar sem nenhum.",
+      "fewRecoveryCodes_other": "Restam só {{count}} códigos de recuperação. Gere novos antes de ficar sem nenhum.",
+      "setUp": "Configurar",
+      "disable": "Desativar",
+      "newRecoveryCodes": "Gerar novos códigos",
+      "password": "Senha atual",
+      "continue": "Continuar",
+      "passwordHint": {
+        "setup": "Confirme sua senha para configurar o app autenticador.",
+        "disable": "Confirme sua senha. Depois, digite um código do app ou um código de recuperação.",
+        "recovery": "Confirme sua senha. Depois, digite um código do app. Os códigos de recuperação atuais deixam de funcionar."
+      },
+      "emailCodeSent": "Como a conta usa o código por e-mail, enviamos um código para {{email}} antes de trocar pelo app.",
+      "emailCodeLabel": "Código do e-mail",
+      "scanHint": "Leia o QR code com o app autenticador, ou digite a chave nele. Depois, digite o código que o app mostrar.",
+      "qrLabel": "QR code para o app autenticador",
+      "manualKey": "Chave para digitar no app",
+      "copyKey": "Copiar chave",
+      "appCodeLabel": "Código do app",
+      "appCodeHint": "Os 6 dígitos que o app mostra agora.",
+      "turnOn": "Ativar",
+      "challengeHint": "Digite o código de 6 dígitos do app autenticador ou um dos seus códigos de recuperação.",
+      "challengeLabel": "Código do app ou de recuperação",
+      "codesTitle": "Códigos de recuperação",
+      "codesHint": "Guarde estes códigos em um lugar seguro. Se perder o celular, cada um permite entrar uma vez. Eles não aparecem de novo.",
+      "copyCodes": "Copiar códigos",
+      "downloadCodes": "Baixar .txt",
+      "savedCodes": "Guardei os códigos",
+      "fileHeading": "Códigos de recuperação da Overcord. Cada um funciona uma vez.",
+      "failed": "Não foi possível continuar.",
+      "confirmFailed": "Não foi possível confirmar o código do app."
+    },
     "loading": "Carregando…",
     "loadFailed": "Não foi possível carregar.",
     "cancel": "Cancelar",
@@ -504,6 +545,7 @@
       "changed_other": "Senha alterada. {{count}} outras sessões foram encerradas."
     },
     "twoFactor": {
+      "replacedByAuthenticator": "Com o app autenticador ativo, o login não usa mais o código por e-mail.",
       "label": "Código por e-mail ao entrar",
       "descriptionOff": "Desativada. Com ela ativa, entrar com a senha também pede um código enviado ao e-mail da conta.",
       "descriptionOn": "Ativada. Entrar com a senha também pede um código enviado ao e-mail da conta.",

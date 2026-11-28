@@ -34,6 +34,7 @@ import { registerLimitsRoutes } from '../modules/limits/limitsRoutes.js';
 import { registerDataExportRoutes } from '../modules/data-export/dataExportRoutes.js';
 import { registerReportRoutes } from '../modules/reports/reports.js';
 import { registerAdminRoutes } from '../modules/admin/adminRoutes.js';
+import { registerAuthenticatorRoutes } from '../modules/auth/authenticatorRoutes.js';
 import { registerSoundboardRoutes } from '../modules/soundboard/soundboard.js';
 import { registerExpressionUsageRoutes } from '../modules/emojis/expressionUsage.js';
 import { registerServerEmojiRoutes } from '../modules/emojis/serverEmojis.js';
@@ -106,6 +107,7 @@ export function createApp(): FastifyInstance {
   }));
 
   registerAuthRoutes(fastify);
+  registerAuthenticatorRoutes(fastify);
   registerAttachmentRoutes(fastify);
   registerProfileRoutes(fastify);
   registerConnectionRoutes(fastify);

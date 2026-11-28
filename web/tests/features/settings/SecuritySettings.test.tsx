@@ -18,6 +18,13 @@ const api = {
   changePassword: vi.fn(),
   endSession: vi.fn(),
   endOtherSessions: vi.fn(),
+  startAuthenticatorSetup: vi.fn(),
+  verifyAuthenticatorSetupEmail: vi.fn(),
+  confirmAuthenticatorSetup: vi.fn(),
+  requestAuthenticatorDisable: vi.fn(),
+  confirmAuthenticatorDisable: vi.fn(),
+  requestRecoveryCodes: vi.fn(),
+  confirmRecoveryCodes: vi.fn(),
 };
 
 vi.mock('@/shared/api/api', async (importOriginal) => ({
@@ -33,6 +40,13 @@ vi.mock('@/shared/api/api', async (importOriginal) => ({
   changePassword: (...args: unknown[]) => api.changePassword(...args),
   endSession: (...args: unknown[]) => api.endSession(...args),
   endOtherSessions: (...args: unknown[]) => api.endOtherSessions(...args),
+  startAuthenticatorSetup: (...args: unknown[]) => api.startAuthenticatorSetup(...args),
+  verifyAuthenticatorSetupEmail: (...args: unknown[]) => api.verifyAuthenticatorSetupEmail(...args),
+  confirmAuthenticatorSetup: (...args: unknown[]) => api.confirmAuthenticatorSetup(...args),
+  requestAuthenticatorDisable: (...args: unknown[]) => api.requestAuthenticatorDisable(...args),
+  confirmAuthenticatorDisable: (...args: unknown[]) => api.confirmAuthenticatorDisable(...args),
+  requestRecoveryCodes: (...args: unknown[]) => api.requestRecoveryCodes(...args),
+  confirmRecoveryCodes: (...args: unknown[]) => api.confirmRecoveryCodes(...args),
 }));
 
 const status = (patch: Partial<SecurityStatus> = {}): SecurityStatus => ({
@@ -302,5 +316,81 @@ describe('SecuritySettings: sign-in alerts', () => {
     render(<SecuritySettings />);
     expect(await alertSwitch()).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByText(/avisos de login não podem ser enviados/)).toBeInTheDocument();
+  });
+});
+
+describe('SecuritySettings: authenticator app', () => {
+  const app = (patch: Partial<NonNullable<SecurityStatus['authenticator']>> = {}) => ({ available: true, enabled: false, recoveryCodesLeft: 0, ...patch });
+  const CODES = Array.from({ length: 10 }, (_, i) => `abcd${i + 2}-efgh${i + 2}`);
+  const SETUP = { secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Overcord:ana?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Overcord' };
+
+  it('sets up with the password, a QR code and a code from the app, then shows the recovery codes once', async () => {
+    const user = userEvent.setup();
+    api.fetchSecurityStatus.mockResolvedValue(status({ authenticator: app() }));
+    api.startAuthenticatorSetup.mockResolvedValue(SETUP);
+    api.confirmAuthenticatorSetup.mockResolvedValue({ recoveryCodes: CODES });
+    render(<SecuritySettings />);
+
+    await user.click(await screen.findByRole('button', { name: 'Configurar' }));
+    await user.type(screen.getByLabelText('Senha atual'), 'my password');
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    expect(api.startAuthenticatorSetup).toHaveBeenCalledWith('my password');
+    expect(await screen.findByRole('img', { name: 'QR code para o app autenticador' })).toBeInTheDocument();
+    expect(screen.getByText('JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Código do app'), '123456');
+    await waitFor(() => expect(api.confirmAuthenticatorSetup).toHaveBeenCalledWith('123456'));
+    const list = await screen.findByRole('list', { name: 'Códigos de recuperação' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(10);
+    await user.click(screen.getByRole('button', { name: 'Guardei os códigos' }));
+    expect(screen.queryByRole('list', { name: 'Códigos de recuperação' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Restam 10 códigos de recuperação/)).toBeInTheDocument();
+  });
+
+  it('asks the emailed code first when two-step login by email is on', async () => {
+    const user = userEvent.setup();
+    api.fetchSecurityStatus.mockResolvedValue(status({ twoFactorEnabled: true, authenticator: app() }));
+    api.startAuthenticatorSetup.mockResolvedValue({ codeRequired: true, email: 'a***@example.com' });
+    api.verifyAuthenticatorSetupEmail.mockResolvedValue(SETUP);
+    render(<SecuritySettings />);
+
+    await user.click(await screen.findByRole('button', { name: 'Configurar' }));
+    await user.type(screen.getByLabelText('Senha atual'), 'my password');
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    expect(await screen.findByText(/enviamos um código para a\*\*\*@example.com/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Código do e-mail'), '246810');
+    await waitFor(() => expect(api.verifyAuthenticatorSetupEmail).toHaveBeenCalledWith('246810'));
+    expect(await screen.findByRole('img', { name: 'QR code para o app autenticador' })).toBeInTheDocument();
+  });
+
+  it('turns off with the password and an app or recovery code, and the email switch comes back', async () => {
+    const user = userEvent.setup();
+    api.fetchSecurityStatus.mockResolvedValue(status({ twoFactorEnabled: true, authenticator: app({ enabled: true, recoveryCodesLeft: 8 }) }));
+    api.requestAuthenticatorDisable.mockResolvedValue({ codeRequired: true, method: 'authenticator' });
+    api.confirmAuthenticatorDisable.mockResolvedValue({ authenticatorEnabled: false });
+    render(<SecuritySettings />);
+
+    expect(await switchOf()).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByText(/o login não usa mais o código por e-mail/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Desativar' }));
+    await user.type(screen.getByLabelText('Senha atual'), 'my password');
+    await user.click(screen.getByRole('button', { name: 'Continuar' }));
+    await user.type(await screen.findByLabelText('Código do app ou de recuperação'), 'abcde-fghjk');
+    await user.click(screen.getAllByRole('button', { name: 'Desativar' }).at(-1)!);
+    await waitFor(() => expect(api.confirmAuthenticatorDisable).toHaveBeenCalledWith('abcde-fghjk'));
+    expect(await screen.findByRole('button', { name: 'Configurar' })).toBeInTheDocument();
+    await waitFor(async () => expect(await switchOf()).not.toHaveAttribute('aria-disabled', 'true'));
+  });
+
+  it('warns when few recovery codes are left and hides itself on a server without it', async () => {
+    api.fetchSecurityStatus.mockResolvedValue(status({ authenticator: app({ enabled: true, recoveryCodesLeft: 1 }) }));
+    const first = render(<SecuritySettings />);
+    expect(await screen.findByText(/Resta só 1 código de recuperação/)).toBeInTheDocument();
+    first.unmount();
+
+    api.fetchSecurityStatus.mockResolvedValue(status());
+    render(<SecuritySettings />);
+    await switchOf();
+    expect(screen.queryByRole('button', { name: 'Configurar' })).not.toBeInTheDocument();
   });
 });

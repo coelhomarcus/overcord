@@ -19,6 +19,11 @@ const RECOVERY_HALF = 5;
 
 type Executor = Tx | typeof db;
 
+/** Whether this instance can offer authenticator apps (TOTP_ENCRYPTION_KEY is set). */
+export function authenticatorsAvailable(): boolean {
+  return config.TOTP_ENCRYPTION_KEY !== null;
+}
+
 function requireKey(): Buffer {
   const key = config.TOTP_ENCRYPTION_KEY;
   if (!key) throw new Error('TOTP_ENCRYPTION_KEY is not configured');
