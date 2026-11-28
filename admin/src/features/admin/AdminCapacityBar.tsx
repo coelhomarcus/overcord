@@ -1,4 +1,6 @@
-import { cn } from '@/shared/lib/utils';
+import { capacityLevel } from './chartScale';
+
+const FILL = { normal: 'bg-accent-primary', warning: 'bg-state-warning', critical: 'bg-state-critical' } as const;
 
 export function AdminCapacityBar({ value, max, label, valueText }: {
   value: number;
@@ -14,9 +16,9 @@ export function AdminCapacityBar({ value, max, label, valueText }: {
     : { 'aria-hidden': true };
 
   return (
-    <div {...accessibility} className="h-1.5 overflow-hidden rounded-full bg-fill-active">
+    <div {...accessibility} className="h-2 overflow-hidden rounded-full bg-fill-hover">
       <div
-        className={cn('h-full rounded-full', percent >= 90 ? 'bg-yellow' : 'bg-text-muted')}
+        className={`h-full rounded-full ${FILL[capacityLevel(value / max)]}`}
         style={{ width: `${percent}%` }}
       />
     </div>

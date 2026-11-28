@@ -62,7 +62,7 @@ function WebhookDetail({ id }: { id: string }) {
       {refreshFailed && <RefreshFailedNotice refreshing={refreshing} onRetry={() => void refresh()} />}
 
       <AdminEntityHeader
-        avatar={<Avatar id={webhook.id} name={webhook.name} avatar={webhook.avatar} size={64} />}
+        avatar={<Avatar id={webhook.id} name={webhook.name} avatar={webhook.avatar} size={72} />}
         title={webhook.name}
         id={webhook.id}
         badges={webhook.serverStatus === 'suspended' ? <Badge value="suspended" /> : undefined}

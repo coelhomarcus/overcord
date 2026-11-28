@@ -10,3 +10,10 @@ test('call metrics include today and six previous calendar days in Belém', () =
   ]);
   assert.deepEqual(afterMidnight, [...beforeMidnight.slice(1), '2026-12-01']);
 });
+
+test('the insight charts read 30 calendar days ending today in Belém', () => {
+  const days = adminMetricsDays(new Date('2026-12-01T03:00:00Z'), 30);
+  assert.equal(days.length, 30);
+  assert.equal(days[0], '2026-11-02');
+  assert.equal(days.at(-1), '2026-12-01');
+});

@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/shared/ui/primitives/button';
+import { RefreshIcon } from '@/shared/ui/icons';
+import { cn } from '@/shared/lib/utils';
 import { formatFileSize } from '@/shared/lib/formatBytes';
 import { AdminNotice } from './AdminNotice';
 import { AdminCapacityBar } from './AdminCapacityBar';
+import { DonutChart, RadialGauge, UnboundedFigure } from './AdminCharts';
 import { sweepOrphans } from './adminApi';
 import type { RetentionInfo, SweepResult } from './adminApi';
 import { AdminActionRow, AdminFieldRow, AdminFields, AdminPageTitle, AdminSection } from './AdminSection';
@@ -128,6 +131,8 @@ export function SystemPage() {
   const signupsPaused = accounts.newPerHourCap > 0 && accounts.newLastHour >= accounts.newPerHourCap;
   const scheduled = info.orphanSweep.last;
   const observed = new Date(at).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const number = new Intl.NumberFormat(language);
+  const percentOf = (value: number, max: number) => new Intl.NumberFormat(language, { style: 'percent', maximumFractionDigits: 0 }).format(value / max);
 
   return (
     <div className="flex flex-col gap-6">
@@ -137,13 +142,39 @@ export function SystemPage() {
         actions={(
           <>
             <span className="text-caption text-text-muted">{t('common.lastRead', { time: observed })}</span>
-            <Button type="button" variant="secondary" disabled={refreshing} onClick={() => void refresh()}>{refreshing ? t('chrome.refreshing') : t('chrome.refresh')}</Button>
+            <Button type="button" variant="secondary" className="h-9" disabled={refreshing} onClick={() => void refresh()}>
+              <RefreshIcon aria-hidden className={cn('size-4', refreshing && 'motion-safe:animate-spin')} />
+              {refreshing ? t('chrome.refreshing') : t('chrome.refresh')}
+            </Button>
           </>
         )}
       />
       {refreshFailed && <AdminNotice tone="warning">{t('common.refreshFailed', { time: observed })}</AdminNotice>}
 
       <div className="grid gap-4 @[850px]:grid-cols-2">
+        <AdminSection title={t('overview.capacity')} description={t('system.capacityDescription')}>
+          <div className="grid flex-1 grid-cols-2 place-items-center gap-4 py-2">
+            {connections.max > 0
+              ? <RadialGauge label={t('common.liveConnections')} value={connections.live} max={connections.max}
+                  valueText={t('overview.gaugeValue', { percent: percentOf(connections.live, connections.max) })}
+                  caption={t('overview.gaugeOf', { value: number.format(connections.live), max: number.format(connections.max) })} />
+              : <UnboundedFigure label={t('common.liveConnections')} value={number.format(connections.live)} note={t('overview.noLimit')} />}
+            {accounts.newPerHourCap > 0
+              ? <RadialGauge label={t('system.signupRate')} value={accounts.newLastHour} max={accounts.newPerHourCap}
+                  valueText={t('overview.gaugeValue', { percent: percentOf(accounts.newLastHour, accounts.newPerHourCap) })}
+                  caption={t('overview.gaugeOf', { value: number.format(accounts.newLastHour), max: number.format(accounts.newPerHourCap) })} />
+              : <UnboundedFigure label={t('system.signupRate')} value={number.format(accounts.newLastHour)} note={t('overview.noLimit')} />}
+          </div>
+        </AdminSection>
+
+        <AdminSection title={t('system.accountsBreakdown')} description={t('system.accountsBreakdownDescription')}>
+          <DonutChart label={t('system.accountsBreakdown')} totalLabel={t('system.accountsTotal')} emptyText={t('overview.noReports')}
+            segments={[
+              { key: 'members', label: t('system.activeMembers'), value: Math.max(0, accounts.total - accounts.suspended - accounts.activeAdmins), color: 'var(--color-chart-1)' },
+              { key: 'admins', label: t('system.activeAdmins'), value: accounts.activeAdmins, color: 'var(--color-violet)' },
+              { key: 'suspended', label: t('system.suspended'), value: accounts.suspended, color: 'var(--color-state-critical)' },
+            ]} />
+        </AdminSection>
         <AdminSection id="state" title={t('common.instanceState')} description={t('common.instanceStateDescription')}>
           <AdminFields>
             <AdminFieldRow label={t('common.liveConnections')}>{t('system.connectionsValue', { live: connections.live, max: connections.max, perAccount: connections.perAccountMax, perIp: connections.perIpMax })}</AdminFieldRow>

@@ -10,7 +10,7 @@ function renderPeaks(values: (number | null)[]) {
 
 it('breaks the line at missing days and plots observed zeros on the baseline', () => {
   const chart = renderPeaks([null, 0, 2, null, 1, 0, null]);
-  const line = chart.querySelector('path');
+  const line = chart.querySelector('[data-series="line"]');
   expect(line?.getAttribute('d')?.match(/[ML]/g)).toEqual(['M', 'L', 'M', 'L']);
   const points = [...chart.querySelectorAll('circle')];
   expect(points).toHaveLength(4);
@@ -24,4 +24,5 @@ it('shows the empty state when the entire week has no samples', () => {
   const chart = renderPeaks(Array(7).fill(null));
   expect(within(chart).getByText('Sem dados')).toBeInTheDocument();
   expect(chart.querySelectorAll('path, circle')).toHaveLength(0);
+  expect(screen.queryByText('Pico da semana')).not.toBeInTheDocument();
 });

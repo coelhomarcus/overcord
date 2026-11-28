@@ -7,6 +7,7 @@ import { RoomStoreProvider } from '@/state/RoomStoreProvider';
 import { createFakeRoomContextValue, renderWithRoom } from '@tests/fixtures/roomContextFixture';
 import { Tile } from '@/features/calls/Tile';
 import { createCallSubscriptions } from '@/features/calls/callSubscriptions';
+import { streamPreviewStore } from '@/features/calls/streamPreviewStore';
 import { fakeCallMediaRoom, fakePublication } from '@tests/fixtures/callMediaFixture';
 import type { Participant } from '@/shared/types/protocol';
 
@@ -336,6 +337,27 @@ describe('Tile — paused share and stopped watching', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Assistir à transmissão de Fulana' }));
     expect(fixture.track.attach).toHaveBeenCalledWith(container.querySelector('video'));
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('asks for a still of a share not watched yet and shows it behind the button', () => {
+    const fixture = remoteScreen(false);
+    const sendWs = vi.fn(() => true);
+    const { container, unmount } = renderWithRoom(<Tile participantId="p-2" kind="screen" isMine={false} />, {
+      ...fixture, sendWs,
+      state: { ...initialRoomState, participants: new Map([['p-2', fakeParticipant()]]) },
+    });
+    expect(sendWs).toHaveBeenCalledWith({ t: 'stream-preview-request', participantId: 'p-2' });
+    expect(container.querySelector('img')).toBeNull();
+
+    act(() => { streamPreviewStore.set('p-2', 'data:image/jpeg;base64,AAAA'); });
+    expect(container.querySelector('img')).toHaveAttribute('src', 'data:image/jpeg;base64,AAAA');
+
+    sendWs.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Assistir à transmissão de Fulana' }));
+    expect(container.querySelector('img')).toBeNull();
+    expect(sendWs).not.toHaveBeenCalled();
+    unmount();
+    streamPreviewStore.clear();
   });
 
   it('a paused share says so, and stopping watching wins over the pause', () => {

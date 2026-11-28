@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { fetchCallMetrics, fetchSystem } from './adminApi';
+import { fetchCallMetrics, fetchInsights, fetchSystem } from './adminApi';
 import type { AdminDetailStatus } from './useAdminDetail';
 
 interface AdminRead<T> {
@@ -58,6 +58,12 @@ function createAdminRead<T>(fetcher: (signal: AbortSignal) => Promise<T>) {
 
 function useAdminRead<T>(resource: ReturnType<typeof createAdminRead<T>>, intervalMs?: number) {
   const { data, pending, failure } = useSyncExternalStore(resource.subscribe, resource.snapshot);
+  // Read on mount, showing what is cached meanwhile, and again whenever the resource goes back to
+  // empty under a view that stayed mounted: a sign-in clears it and aborts the read in flight.
+  const empty = data === null && !pending && failure === null;
+  useEffect(() => {
+    if (empty) void resource.read();
+  }, [resource, empty]);
   useEffect(() => {
     void resource.read();
     if (!intervalMs) return;
@@ -70,6 +76,7 @@ function useAdminRead<T>(resource: ReturnType<typeof createAdminRead<T>>, interv
 
 const system = createAdminRead(fetchSystem);
 const callMetrics = createAdminRead(fetchCallMetrics);
+const insights = createAdminRead(fetchInsights);
 
 export function useAdminSystem() {
   return useAdminRead(system);
@@ -79,7 +86,12 @@ export function useAdminCallMetrics() {
   return useAdminRead(callMetrics, 15_000);
 }
 
+export function useAdminInsights() {
+  return useAdminRead(insights);
+}
+
 export function clearAdminResources() {
   system.clear();
   callMetrics.clear();
+  insights.clear();
 }

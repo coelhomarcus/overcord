@@ -100,7 +100,8 @@ function ServerDetail({ id }: { id: string }) {
       {refreshFailed && <RefreshFailedNotice refreshing={refreshing} onRetry={() => void refresh()} />}
 
       <AdminEntityHeader
-        avatar={<ServerIcon id={server.id} name={server.name} icon={server.icon} size={64} active />}
+        square
+        avatar={<ServerIcon id={server.id} name={server.name} icon={server.icon} size={72} active />}
         title={name}
         id={server.id}
         badges={<>{!server.ownerId && <span className="inline-flex rounded-sm bg-yellow/15 px-1.5 py-0.5 text-micro font-medium text-yellow">{t('ui.noOwner')}</span>}<Badge value={server.status} /></>}

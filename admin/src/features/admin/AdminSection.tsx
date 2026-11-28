@@ -1,13 +1,20 @@
 import { useId } from 'react';
 import type { ReactNode } from 'react';
+import { useLocation } from 'react-router';
 import { cn } from '@/shared/lib/utils';
+import { sectionForPath } from './adminCatalog';
 
 export function AdminPageTitle({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+  // the section's own icon, as the navigation draws it, so the page and its menu entry match
+  const Icon = sectionForPath(useLocation().pathname)?.icon;
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-      <div className="min-w-0 flex-1 basis-64">
-        <h1 className="admin-page-heading">{title}</h1>
-        {description && <p className="mt-2 max-w-prose text-label text-text-muted">{description}</p>}
+      <div className="flex min-w-0 flex-1 basis-64 items-center gap-4">
+        {Icon && <span className="admin-icon-tile hidden size-12 @[480px]:grid"><Icon size={24} aria-hidden /></span>}
+        <div className="min-w-0 flex-1">
+          <h1 className="admin-page-heading">{title}</h1>
+          {description && <p className="mt-1.5 max-w-prose text-label text-text-muted">{description}</p>}
+        </div>
       </div>
       {actions && <div className="flex flex-none flex-wrap items-center gap-2">{actions}</div>}
     </header>
@@ -28,7 +35,8 @@ export function AdminSection({ id, title, description, actions, danger, children
   return (
     <section id={id} aria-labelledby={headingId} className={cn('admin-panel flex min-w-0 scroll-mt-6 flex-col', danger && 'border-red/50', className)}>
       <header className="admin-card-inset flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-border-divider">
-        <div className="min-w-0 flex-1">
+        {/* the title keeps room for a few words: wide actions move under it instead of squeezing it */}
+        <div className="min-w-0 flex-1 basis-44">
           <h2 id={headingId} className={cn('text-body font-semibold wrap-anywhere', danger ? 'text-red-text' : 'text-text-strong')}>{title}</h2>
           {description && <p className="mt-1 max-w-prose text-label text-text-muted">{description}</p>}
         </div>

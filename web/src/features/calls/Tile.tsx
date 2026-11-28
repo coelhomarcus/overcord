@@ -1,4 +1,4 @@
-import { CellSignalLowIcon, CellSignalNoneIcon, CircleNotchIcon, EyeIcon, EyeSlashIcon, MicrophoneSlashIcon, MonitorIcon, MonitorPlayIcon, SpeakerSlashIcon } from '@/shared/ui/icons';
+import { CellSignalLowIcon, CellSignalNoneIcon, CircleNotchIcon, EyeSlashIcon, MicrophoneSlashIcon, MonitorIcon, MonitorPlayIcon, SpeakerSlashIcon } from '@/shared/ui/icons';
 import { useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,11 +10,17 @@ import { participantMicMuted, useOwnMic } from './micState';
 import { useMuteForMe } from './useMuteForMe';
 import { useTileSizing } from './useTileSizing';
 import { TileMenuButton } from './TileMenuButton';
+import { useStreamPreview } from './streamPreviewStore';
+import { WatchButton } from './WatchButton';
 import { tileKey } from './tileTypes';
 import type { TileKind } from './tileTypes';
 import { Avatar, colorFor } from '@/shared/Avatar';
 import { Button } from '@/shared/ui/primitives/button';
 import { cn } from '@/shared/lib/utils';
+
+/** How often a share nobody here is watching yet asks for a fresh still. The
+ * server keeps a frame for 10s, so every tile in the call shares one capture. */
+const STILL_REFRESH_MS = 15_000;
 
 interface TileProps {
   participantId: string;
@@ -34,7 +40,7 @@ interface TileProps {
 
 export function Tile({ participantId, kind, isMine, loading = false, paused = false, fit = 'contain', sizing = 'fill', avatarSize = 96, nameSize = 'body' }: TileProps) {
   const { t } = useTranslation('calls');
-  const { dispatch, openTileMenu, tileDomRegistry, deafened, showTileBanners, mirrorCameraPreview, livekitRoom, callSubscriptions } = useRoom('dispatch', 'openTileMenu', 'tileDomRegistry', 'deafened', 'showTileBanners', 'mirrorCameraPreview', 'livekitRoom', 'callSubscriptions');
+  const { dispatch, openTileMenu, tileDomRegistry, deafened, showTileBanners, mirrorCameraPreview, livekitRoom, callSubscriptions, sendWs } = useRoom('dispatch', 'openTileMenu', 'tileDomRegistry', 'deafened', 'showTileBanners', 'mirrorCameraPreview', 'livekitRoom', 'callSubscriptions', 'sendWs');
   const state = useRoomState('me', 'hiddenVideoKeys', 'focusedId');
   const key = tileKey(participantId, kind);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -69,6 +75,18 @@ export function Tile({ participantId, kind, isMine, loading = false, paused = fa
   const videoTrack = kind === 'screen' ? media.screenTrack : kind === 'camera' ? media.cameraTrack : null;
   const { containerRef, frameStyle } = useTileSizing(sizing, `${participantId}:${kind}`, showsVideo, videoTrack, videoRef, rootRef);
   useAttachTrack(showsVideo ? videoTrack : null, videoRef);
+
+  // The same still the "ao vivo" badge shows, behind "Assistir", so a share not
+  // watched yet reads as what it is instead of a black box. Asked again now and
+  // then while the tab is in view; it never starts the video itself.
+  const still = useStreamPreview(participantId);
+  useEffect(() => {
+    if (!needsWatch) return;
+    const ask = () => { if (document.visibilityState === 'visible') sendWs({ t: 'stream-preview-request', participantId }); };
+    ask();
+    const timer = setInterval(ask, STILL_REFRESH_MS);
+    return () => { clearInterval(timer); };
+  }, [needsWatch, participantId, sendWs]);
 
   const showSpeakingBorder = kind !== 'screen' && isSpeaking;
   const tint = colorFor(participantId, avatarColor);
@@ -164,32 +182,40 @@ export function Tile({ participantId, kind, isMine, loading = false, paused = fa
           style={isMine && kind === 'camera' && mirrorCameraPreview ? { transform: 'scaleX(-1)' } : undefined}
         />
       ) : kind === 'screen' ? (
-        <div className="grid h-full w-full place-items-center bg-bg-call">
+        <div className="relative grid h-full w-full place-items-center bg-bg-call">
           {needsWatch ? (
-            <div className="relative flex w-full justify-center">
-              {(watchState === 'stopped' || watchState === 'failed') && (
-                <span role="status" className={cn(
-                  'absolute inset-x-1 bottom-full mb-0.5 text-center text-caption leading-tight @[220px]/tile:mb-2 @max-[128px]/tile:sr-only',
-                  watchState === 'failed' ? 'text-red-text' : 'text-text-muted',
-                )}>
-                  {t(watchState === 'failed' ? 'tile.watchFailed' : 'tile.stoppedWatching')}
-                </span>
+            <>
+              {still?.image && (
+                <img
+                  src={still.image}
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  className="pointer-events-none absolute inset-0 h-full w-full scale-105 object-contain opacity-45 blur-sm"
+                />
               )}
-              <Button
-                type="button"
-                size="lg"
-                className="h-9 rounded-full px-3.5 font-semibold @max-[128px]/tile:size-8 @max-[128px]/tile:p-0 @[220px]/tile:h-11 @[220px]/tile:gap-2 @[220px]/tile:px-5 @[220px]/tile:text-body"
-                aria-label={t('tile.watchLabel', { name: name || t('tile.participant') })}
-                disabled={!media.screenShareId}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  callSubscriptions.setWatching(participantId, media.screenShareId, true);
-                }}
-              >
-                <EyeIcon aria-hidden className="size-5" />
-                <span className="@max-[128px]/tile:sr-only">{t('menu.watch')}</span>
-              </Button>
-            </div>
+              <div className="relative flex w-full justify-center">
+                {(watchState === 'stopped' || watchState === 'failed') && (
+                  <span role="status" className={cn(
+                    'absolute inset-x-1 bottom-full mb-1 text-center text-caption leading-tight [text-shadow:0_1px_2px_rgb(0_0_0/0.6)] @[220px]/tile:mb-2 @max-[128px]/tile:sr-only',
+                    watchState === 'failed' ? 'text-red-text' : 'text-white/75',
+                  )}>
+                    {t(watchState === 'failed' ? 'tile.watchFailed' : 'tile.stoppedWatching')}
+                  </span>
+                )}
+                <WatchButton
+                  label={t('menu.watch')}
+                  aria-label={t('tile.watchLabel', { name: name || t('tile.participant') })}
+                  className="@max-[128px]/tile:size-8 @max-[128px]/tile:p-0 @[220px]/tile:h-9 @[220px]/tile:px-3.5"
+                  labelClassName="@max-[128px]/tile:sr-only"
+                  disabled={!media.screenShareId}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    callSubscriptions.setWatching(participantId, media.screenShareId, true);
+                  }}
+                />
+              </div>
+            </>
           ) : paused ? (
             <span className="flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-caption text-white/75">
               <MonitorPlayIcon size={16} />

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type LinkProps } from 'react-router';
 import { Button } from '@/shared/ui/primitives/button';
@@ -14,11 +14,15 @@ import { AdminDetailSkeleton, AdminStackedSkeleton } from './AdminSkeletons';
 import { ArrowLeftIcon } from '@/shared/ui/icons';
 import { useLanguage } from '@/i18n/useLanguage';
 
+/** The colour of a state: a tinted pill with a dot, and the state written in it. */
 const TONES: Record<string, string> = {
-  suspended: 'text-red-text',
-  resolved: 'text-green',
-  dismissed: 'text-text-muted',
-  failed: 'text-red-text',
+  active: 'var(--color-green)',
+  resolved: 'var(--color-green)',
+  suspended: 'var(--color-red)',
+  failed: 'var(--color-red)',
+  open: 'var(--color-yellow)',
+  reviewing: 'var(--color-blue)',
+  admin: 'var(--color-violet)',
 };
 /** In-flow navigation that used to be a raw underlined `<AppLink>`. */
 export function AdminTextLink({ to, state, children, className }: {
@@ -46,8 +50,25 @@ export function AdminBackLink({ to, state, children }: { to: LinkProps['to']; st
 
 export function Badge({ value }: { value: string }) {
   const { t } = useTranslation('admin');
-  return <span className={cn('inline-flex flex-none items-center rounded-full border border-border-default bg-fill-subtle px-2 py-0.5 text-caption font-medium', TONES[value] ?? 'text-text-secondary')}>{t(`status.${value}`, { defaultValue: value })}</span>;
+  const tone = TONES[value];
+  return (
+    <span
+      className={cn('inline-flex flex-none items-center gap-1.5 rounded-full border px-2 py-0.5 text-caption font-medium', tone ? 'admin-badge-tone text-text-primary' : 'border-border-default bg-fill-subtle text-text-secondary')}
+      style={tone ? { '--badge': tone } as CSSProperties : undefined}
+    >
+      <span aria-hidden className={cn('size-1.5 flex-none rounded-full', !tone && 'bg-text-faint')} style={tone ? { background: tone } : undefined} />
+      {t(`status.${value}`, { defaultValue: value })}
+    </span>
+  );
 }
+
+/** The dot before an audit entry, by what the action touched. */
+const ACTION_DOT: Record<string, string> = {
+  user: 'bg-chart-1',
+  server: 'bg-chart-2',
+  webhook: 'bg-chart-3',
+  report: 'bg-chart-4',
+};
 
 export function AuditList({ items, empty, compact }: { items: AuditRow[]; empty?: string; compact?: boolean }) {
   const language = useLanguage();
@@ -56,9 +77,12 @@ export function AuditList({ items, empty, compact }: { items: AuditRow[]; empty?
   return (
     <ul className="flex flex-col divide-y divide-border-divider">
       {items.map((row) => (
-        <li key={row.id} className="min-w-0 py-3 text-label first:pt-0 last:pb-0">
+        <li key={row.id} className="min-w-0 py-3 pl-4.5 text-label first:pt-0 last:pb-0">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-            <span className="font-medium break-words text-text-primary">{actionLabel(row.action, language)}</span>
+            <span className="relative font-medium break-words text-text-primary">
+              <span aria-hidden className={cn('absolute top-[0.45em] -left-4.5 size-2 rounded-full', row.result === 'failed' ? 'bg-red' : ACTION_DOT[row.action.split('.')[0]] ?? 'bg-text-faint')} />
+              {actionLabel(row.action, language)}
+            </span>
             <time dateTime={row.at} className="text-caption text-text-muted">{formatWhen(row.at, language)}</time>
           </div>
           <p className="mt-0.5 text-caption break-words text-text-muted">

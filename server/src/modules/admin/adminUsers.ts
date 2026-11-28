@@ -273,7 +273,7 @@ export async function deleteUserAccount(ctx: Ctx, targetId: string, confirm: str
 const createdAtIso = sql<string>`to_char(${users.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 export interface AdminUserRow {
-  id: string; username: string; displayName: string; avatar: string; avatarColor: string;
+  id: string; username: string; displayName: string; avatar: string; avatarPoster: string; avatarColor: string;
   role: string; status: string; createdAt: string;
   lastSeenAt: string | null;
   online: boolean;
@@ -312,7 +312,7 @@ export async function listAdminUsers(filters: AdminUserFilters, cursorRaw?: stri
   const onlineIds = new Set(listOnlineUserIds());
   return {
     items: page.map(({ user: u, ts }) => ({
-      id: u.id, username: u.username, displayName: u.displayName.trim() || u.username, avatar: u.avatar, avatarColor: u.avatarColor,
+      id: u.id, username: u.username, displayName: u.displayName.trim() || u.username, avatar: u.avatar, avatarPoster: u.avatarPoster, avatarColor: u.avatarColor,
       role: u.role, status: u.status, createdAt: ts,
       lastSeenAt: u.lastSeenAt ? u.lastSeenAt.toISOString() : null,
       online: onlineIds.has(u.id),
@@ -344,7 +344,7 @@ export async function getAdminUser(userId: string) {
   const [history, badges] = await Promise.all([listAudit({ targetType: 'user', targetId: userId }), listUserBadges(userId)]);
   return {
     user: {
-      id: u.id, username: u.username, displayName: u.displayName.trim() || u.username, email: u.email, avatar: u.avatar, avatarColor: u.avatarColor,
+      id: u.id, username: u.username, displayName: u.displayName.trim() || u.username, email: u.email, avatar: u.avatar, avatarPoster: u.avatarPoster, avatarColor: u.avatarColor,
       role: u.role, status: u.status, statusReason: u.statusReason,
       statusChangedAt: u.statusChangedAt ? u.statusChangedAt.toISOString() : null, createdAt: row.ts,
       lastSeenAt: u.lastSeenAt ? u.lastSeenAt.toISOString() : null,

@@ -12,14 +12,14 @@ export function AdminNavigation({ onNavigate }: { onNavigate?: () => void }) {
     <nav aria-label={t('layout.navigation')} className="flex min-w-0 flex-col gap-5">
       {ADMIN_GROUPS.map((group) => (
         <div key={group.labelKey ?? 'overview'}>
-          {group.labelKey && <p className="mb-1.5 px-3 text-micro font-semibold tracking-[0.06em] text-text-muted uppercase">{t(group.labelKey)}</p>}
+          {group.labelKey && <p className="mb-2 px-2.5 text-micro font-semibold tracking-[0.06em] text-text-muted uppercase">{t(group.labelKey)}</p>}
           <ul className="grid gap-0.5">
             {group.sections.map((section) => {
               const Icon = section.icon;
               return (
                 <li key={section.id}>
                   <NavLink to={adminSectionPath(section)} end={section.id === 'overview'} onClick={onNavigate} className="admin-nav-link focus-ring">
-                    <Icon size={17} aria-hidden className="shrink-0" />
+                    <span className="admin-nav-icon"><Icon size={16} aria-hidden /></span>
                     <span className="min-w-0 leading-snug wrap-anywhere">{t(section.labelKey)}</span>
                   </NavLink>
                 </li>

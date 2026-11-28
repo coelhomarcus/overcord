@@ -29,7 +29,7 @@ Overcord is a self-hosted place to chat and call with friends. Talk in direct me
 
 **Voice and video**
 - Voice channels and one-to-one DM calls, with camera and screen sharing.
-- Choose **Watch** (the eye icon) in the center of a screen share tile or thumbnail to start its video and shared audio. Viewers keep watching when the presenter switches sources. Microphones and cameras are received automatically. Screen video adapts to the viewer's layout and connection, including fullscreen and picture-in-picture. It pauses when it leaves view while shared audio keeps playing.
+- Choose **Watch** (the eye icon) in the center of a screen share tile or thumbnail to start its video and shared audio. Until then the tile shows a dimmed, blurred still of the share, refreshed every few seconds. Viewers keep watching when the presenter switches sources. Microphones and cameras are received automatically. Screen video adapts to the viewer's layout and connection, including fullscreen and picture-in-picture. It pauses when it leaves view while shared audio keeps playing.
 - One call per account: every tab and device shows the call you are in, and can take it over after asking.
 - A soundboard per server, usable in any call.
 
@@ -63,7 +63,7 @@ Overcord is a self-hosted place to chat and call with friends. Talk in direct me
 
 **Administration**
 - An optional [administration site](docs/DEPLOY.md#administration-site) with a dedicated hostname and mandatory two-step sign-in with an authenticator app for managing users and their badges, servers, webhooks, reports, audit history and uploads.
-- The administration dashboard groups account activity in one card and shows capacity bars for connections and storage. It also shows recent audit activity and open reports. The dashboard uses a dark monochrome theme. The sidebar shows the signed-in account's profile picture and becomes a navigation menu on smaller screens.
+- The administration dashboard opens with headline cards for accounts, online accounts, active calls and servers, with 30-day trends. Its charts show new accounts per day over 30 days, connection and storage capacity gauges, the week's call peaks and the report queue by status, beside recent audit activity and service health. The System page adds capacity gauges and accounts by state. Every chart shows a day's value on hover and lists its values for screen readers. The dashboard uses a dark theme with a blue accent and colour-coded states. The sidebar shows the signed-in account's profile picture and becomes a navigation menu on smaller screens.
 - **Calls and screen shares** shows live totals for active calls, accounts in calls and screens transmitting video. Paused video drops out of the total. Two line charts show the highest service-wide counts observed each day over the past seven days, using the Belém time zone. Gaps indicate days without observations. The System tab shows connection and storage capacity, pending and failed notifications, and server uptime.
 - [Full backups](docs/DEPLOY.md#backups) downloaded from the administration site as one ZIP of the database and every stored file, never kept on the server.
 

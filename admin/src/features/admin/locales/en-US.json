@@ -28,7 +28,9 @@
     "noData": "No data",
     "loadFailed": "Could not load call and screen sharing metrics.",
     "refreshFailed": "Could not refresh metrics. The displayed totals may be out of date.",
-    "screensStale": "The screen sharing total is out of date. Last successful reading at {{time}}."
+    "screensStale": "The screen sharing total is out of date. Last successful reading at {{time}}.",
+    "weekPeak": "Week peak",
+    "today": "Today"
   },
   "status": {
     "active": "Active",
@@ -77,7 +79,31 @@
     "viewSystem": "View system",
     "metricsUnavailable": "Could not load instance metrics.",
     "activityUnavailable": "Could not load all recent activity.",
-    "stale": "Some data could not be refreshed and may be out of date."
+    "stale": "Some data could not be refreshed and may be out of date.",
+    "subtitle": "The instance’s health, growth and activity in real time.",
+    "onlineNow": "Online now",
+    "onlineShare": "{{percent}} of accounts",
+    "inCall_one": "{{formatted}} account in a call",
+    "inCall_other": "{{formatted}} accounts in calls",
+    "screens_one": "{{formatted}} screen",
+    "screens_other": "{{formatted}} screens",
+    "lastMonth": "+{{formatted}} in the last 30 days",
+    "signupsTitle": "New accounts per day",
+    "signupsDescription": "Last 30 days, in the {{timeZone}} time zone.",
+    "inThirtyDays": "In 30 days",
+    "signupsValue_one": "{{formatted}} new account",
+    "signupsValue_other": "{{formatted}} new accounts",
+    "insightsUnavailable": "Growth charts are not available on this server.",
+    "capacity": "Capacity",
+    "gaugeValue": "{{percent}} in use",
+    "gaugeOf": "{{value}} of {{max}}",
+    "noLimit": "No limit set",
+    "reportsTitle": "Reports",
+    "reportsTotal": "in total",
+    "noReports": "none yet",
+    "suspendedServers": "Suspended servers",
+    "callPeaks": "Call peaks this week",
+    "suspendedAccounts": "Suspended accounts"
   },
   "site": {
     "signInSubtitle": "Sign in with your Overcord administrator account. You’ll need a code sent by email.",
@@ -532,7 +558,8 @@
     "reports": "What people reported. Open a report to claim it, see the evidence and decide.",
     "audit": "Everything administrators and the system itself did: who, to what, when and why.",
     "system": "The state of the instance right now: connections, storage, accounts, services and maintenance.",
-    "backup": "Download a full copy of the instance: the database and every stored file, in one .zip."
+    "backup": "Download a full copy of the instance: the database and every stored file, in one .zip.",
+    "callMetrics": "How many calls and screen shares are happening now, and each day’s peak this week."
   },
   "system": {
     "graceAny": "only files old enough are considered (recent ones may be uploads in progress)",
@@ -585,7 +612,13 @@
       "notifications_read": "Read notifications",
       "notifications_unread": "Unread notifications",
       "outbox_events": "Delivered event queue"
-    }
+    },
+    "capacityDescription": "How much of each configured limit is in use right now.",
+    "signupRate": "Sign-ups per hour",
+    "accountsBreakdown": "Accounts by state",
+    "accountsBreakdownDescription": "Every account on the instance, by its current state.",
+    "accountsTotal": "accounts",
+    "activeMembers": "Active"
   },
   "auditDetails": {
     "yes": "yes",

@@ -28,7 +28,9 @@
     "noData": "Sem dados",
     "loadFailed": "Não foi possível carregar as métricas de chamadas e transmissões.",
     "refreshFailed": "Não foi possível atualizar as métricas. Os totais exibidos podem estar desatualizados.",
-    "screensStale": "O total de telas está desatualizado. Última leitura válida em {{time}}."
+    "screensStale": "O total de telas está desatualizado. Última leitura válida em {{time}}.",
+    "weekPeak": "Pico da semana",
+    "today": "Hoje"
   },
   "status": {
     "active": "Ativo",
@@ -77,7 +79,31 @@
     "viewSystem": "Ver sistema",
     "metricsUnavailable": "Não foi possível carregar as métricas da instância.",
     "activityUnavailable": "Não foi possível carregar toda a atividade recente.",
-    "stale": "Não foi possível atualizar todos os dados. Alguns valores podem estar desatualizados."
+    "stale": "Não foi possível atualizar todos os dados. Alguns valores podem estar desatualizados.",
+    "subtitle": "Saúde, crescimento e atividade da instância em tempo real.",
+    "onlineNow": "Online agora",
+    "onlineShare": "{{percent}} das contas",
+    "inCall_one": "{{formatted}} conta em chamada",
+    "inCall_other": "{{formatted}} contas em chamada",
+    "screens_one": "{{formatted}} tela",
+    "screens_other": "{{formatted}} telas",
+    "lastMonth": "+{{formatted}} nos últimos 30 dias",
+    "signupsTitle": "Novas contas por dia",
+    "signupsDescription": "Últimos 30 dias, no fuso {{timeZone}}.",
+    "inThirtyDays": "Em 30 dias",
+    "signupsValue_one": "{{formatted}} conta nova",
+    "signupsValue_other": "{{formatted}} contas novas",
+    "insightsUnavailable": "Os gráficos de crescimento não estão disponíveis neste servidor.",
+    "capacity": "Capacidade",
+    "gaugeValue": "{{percent}} em uso",
+    "gaugeOf": "{{value}} de {{max}}",
+    "noLimit": "Sem limite configurado",
+    "reportsTitle": "Denúncias",
+    "reportsTotal": "no total",
+    "noReports": "nenhuma ainda",
+    "suspendedServers": "Servidores suspensos",
+    "callPeaks": "Picos de chamadas na semana",
+    "suspendedAccounts": "Contas suspensas"
   },
   "site": {
     "signInSubtitle": "Entre com sua conta de administrador do Overcord. Você vai precisar de um código enviado por e-mail.",
@@ -532,7 +558,8 @@
     "reports": "O que as pessoas denunciaram. Abra uma denúncia para assumir, ver a evidência e decidir.",
     "audit": "Tudo o que administradores e o próprio sistema fizeram: quem, sobre o quê, quando e por quê.",
     "system": "O estado da instância agora: conexões, armazenamento, contas, serviços e manutenção.",
-    "backup": "Baixe uma cópia completa da instância: o banco de dados e todos os arquivos, num único .zip."
+    "backup": "Baixe uma cópia completa da instância: o banco de dados e todos os arquivos, num único .zip.",
+    "callMetrics": "Quantas chamadas e transmissões de tela acontecem agora e o pico de cada dia da semana."
   },
   "system": {
     "graceAny": "só arquivos antigos o bastante são considerados (os recentes podem ser uploads em andamento)",
@@ -585,7 +612,13 @@
       "notifications_read": "Notificações lidas",
       "notifications_unread": "Notificações não lidas",
       "outbox_events": "Fila de eventos entregues"
-    }
+    },
+    "capacityDescription": "O quanto dos limites configurados está em uso agora.",
+    "signupRate": "Cadastros por hora",
+    "accountsBreakdown": "Contas por situação",
+    "accountsBreakdownDescription": "Todas as contas da instância, pela situação de cada uma.",
+    "accountsTotal": "contas",
+    "activeMembers": "Ativas"
   },
   "auditDetails": {
     "yes": "sim",

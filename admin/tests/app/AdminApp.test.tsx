@@ -41,6 +41,12 @@ beforeEach(() => {
     timeZone: 'America/Belem',
     history: [],
   });
+  api.fetchInsights.mockResolvedValue({
+    timeZone: 'America/Belem',
+    days: Array.from({ length: 30 }, (_, i) => ({ day: `2026-01-${String(i + 1).padStart(2, '0')}`, accounts: i % 3, servers: i === 29 ? 1 : 0 })),
+    servers: { total: 4, suspended: 1 },
+    reports: { open: 2, reviewing: 1, resolved: 3, dismissed: 0 },
+  });
   api.fetchAudit.mockResolvedValue({ items: [], nextCursor: null });
   api.fetchAdminReports.mockResolvedValue({ items: [], nextCursor: null });
   api.fetchAdminUsers.mockResolvedValue({ items: [], nextCursor: null });
@@ -67,6 +73,17 @@ describe('admin app', () => {
     await user.click(within(dialog).getByRole('link', { name: 'Usuários' }));
     expect(await screen.findByRole('heading', { name: 'Usuários' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('draws the growth, capacity and report charts on the overview', async () => {
+    open('/admin');
+    expect(await screen.findByRole('img', { name: 'Novas contas por dia' })).toBeInTheDocument();
+    expect(screen.getByText('+30 nos últimos 30 dias')).toBeInTheDocument();
+    expect(await screen.findByRole('meter', { name: 'Conexões ao vivo' })).toHaveAttribute('aria-valuetext', '3% em uso');
+    expect(screen.getByRole('link', { name: /Servidores 4/ })).toHaveAttribute('href', '/admin/servers');
+    const reports = screen.getByRole('img', { name: 'Denúncias' }).closest('section')!;
+    expect(within(reports).getByText('Em análise').closest('li')).toHaveTextContent('Em análise117%');
+    expect(screen.getByText('Servidores suspensos')).toBeInTheDocument();
   });
 
   it('keeps separate overview panels usable when instance metrics fail, and retries them', async () => {
