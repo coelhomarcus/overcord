@@ -21,6 +21,7 @@ import { getAdminWebhook, listAdminWebhooks, revokeWebhook, type WebhookActionRe
 import { claimReport, getAdminReport, listAdminReports, resolveReport, type ReportActionResult } from './adminReports.js';
 import { getSystemInfo } from './adminSystem.js';
 import { getAdminCallMetrics } from './adminCallMetrics.js';
+import { getAdminInsights } from './adminInsights.js';
 import { SweepInProgressError, sweepOrphans } from '../attachments/orphanSweeper.js';
 import { backupRunning, getBackupInfo, handleBackupDownload, issueDownloadToken, pgDumpAvailable } from '../backups/backupDownload.js';
 import type { ReportAction } from '../reports/reportsPolicy.js';
@@ -254,6 +255,11 @@ export function registerAdminRoutes(fastify: FastifyInstance): void {
   fastify.get('/api/admin/call-metrics', async (request, reply) => {
     if (!(await requireAdmin(request, reply))) return;
     sendJson(reply, 200, await getAdminCallMetrics());
+  });
+
+  fastify.get('/api/admin/insights', async (request, reply) => {
+    if (!(await requireAdmin(request, reply))) return;
+    sendJson(reply, 200, await getAdminInsights());
   });
   // A dry run only reports and needs no justification; deleting files does.
   fastify.post('/api/admin/system/sweep-orphans', async (request, reply) => {

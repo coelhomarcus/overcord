@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { fetchCallMetrics, fetchSystem } from './adminApi';
+import { fetchCallMetrics, fetchInsights, fetchSystem } from './adminApi';
 import type { AdminDetailStatus } from './useAdminDetail';
 
 interface AdminRead<T> {
@@ -76,6 +76,7 @@ function useAdminRead<T>(resource: ReturnType<typeof createAdminRead<T>>, interv
 
 const system = createAdminRead(fetchSystem);
 const callMetrics = createAdminRead(fetchCallMetrics);
+const insights = createAdminRead(fetchInsights);
 
 export function useAdminSystem() {
   return useAdminRead(system);
@@ -85,7 +86,12 @@ export function useAdminCallMetrics() {
   return useAdminRead(callMetrics, 15_000);
 }
 
+export function useAdminInsights() {
+  return useAdminRead(insights);
+}
+
 export function clearAdminResources() {
   system.clear();
   callMetrics.clear();
+  insights.clear();
 }

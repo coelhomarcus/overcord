@@ -84,6 +84,7 @@ describe('matrix: admin routes', () => {
     ['claim report', 'POST', '/api/admin/reports/x/claim'],
     ['resolve report', 'POST', '/api/admin/reports/x/resolve'],
     ['System tab', 'GET', '/api/admin/system'],
+    ['insights', 'GET', '/api/admin/insights'],
     ['sweep orphans', 'POST', '/api/admin/system/sweep-orphans'],
     ['request backup code', 'POST', '/api/admin/backup/download/request'],
     ['backup link', 'POST', '/api/admin/backup/download'],
@@ -115,7 +116,7 @@ describe('matrix: admin routes', () => {
     const publicResponse = await app.inject({ method: 'GET', url: '/api/admin/users', headers: { cookie: `${config.SESSION_COOKIE}=${admin.token}` } });
     assert.equal(publicResponse.statusCode, 404);
     admin.adminToken = await makeAdminSession(admin.id);
-    for (const url of ['/api/admin/users', '/api/admin/servers', '/api/admin/webhooks', '/api/admin/reports', '/api/admin/system', '/api/admin/audit']) {
+    for (const url of ['/api/admin/users', '/api/admin/servers', '/api/admin/webhooks', '/api/admin/reports', '/api/admin/system', '/api/admin/insights', '/api/admin/audit']) {
       assert.equal((await call(admin, 'GET', url)).status, 200, url);
     }
     expectDenied(await call(admin, 'POST', `/api/admin/users/${admin.id}/suspend`, {}), 400, 'reason_required', 'no reason');

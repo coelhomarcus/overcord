@@ -27,6 +27,16 @@ export function formatDateShort(iso: string | null | undefined, language: string
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString(language, { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/** A chart column for a calendar day (`2026-11-28`, already in the admin time zone, so read as UTC):
+ * `28/11` under the column, the weekday and date in its tooltip. */
+export function chartDay(day: string, language: string): { axisLabel: string; fullLabel: string } {
+  const date = new Date(day);
+  return {
+    axisLabel: date.toLocaleDateString(language, { timeZone: 'UTC', day: '2-digit', month: '2-digit' }),
+    fullLabel: date.toLocaleDateString(language, { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }),
+  };
+}
+
 export const ACTION_LABELS: Record<string, string> = {
   'user.suspend': 'Conta suspensa', 'user.grant_admin': 'Admin concedido', 'user.revoke_admin': 'Admin removido', 'user.grant_badge': 'Insígnia concedida', 'user.revoke_badge': 'Insígnia removida', 'storage.sweep_orphans': 'Órfãos coletados', 'storage.orphan_delete': 'Falha ao apagar órfão', 'retention.sweep': 'Retenção aplicada', 'user.reactivate': 'Conta reativada', 'user.revoke_sessions': 'Sessões revogadas', 'user.delete': 'Conta excluída',
   'user.delete.avatar_cleanup': 'Limpeza da foto', 'group.suspend': 'Grupo suspenso', 'group.reactivate': 'Grupo reativado',

@@ -42,6 +42,8 @@ const post = <T = { ok: true }>(path: string, body: Record<string, unknown>) => 
 
 export interface AdminUserRow {
   id: string; username: string; displayName: string; avatar: string; avatarColor: string;
+  /** the still first frame of an animated avatar; missing from older servers */
+  avatarPoster?: string;
   role: 'user' | 'admin'; status: 'active' | 'suspended'; createdAt: string;
   lastSeenAt: string | null; online: boolean;
 }
@@ -186,6 +188,18 @@ export interface CallMetrics {
 }
 
 export const fetchCallMetrics = (signal?: AbortSignal) => adminFetch<CallMetrics>('/api/admin/call-metrics', { signal });
+
+interface InsightDay { day: string; accounts: number; servers: number }
+/** Growth and moderation figures for the charts; a server older than them answers 404. */
+export interface AdminInsights {
+  timeZone: string;
+  /** the last 30 calendar days in `timeZone`, oldest first */
+  days: InsightDay[];
+  servers: { total: number; suspended: number };
+  reports: Record<'open' | 'reviewing' | 'resolved' | 'dismissed', number>;
+}
+
+export const fetchInsights = (signal?: AbortSignal) => adminFetch<AdminInsights>('/api/admin/insights', { signal });
 
 // ---- backup ------------------------------------------------------------------
 

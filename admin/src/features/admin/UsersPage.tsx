@@ -53,7 +53,8 @@ function RowActions({ user }: { user: AdminUserRow }) {
 function UserIdentity({ user, from }: { user: AdminUserRow; from: { from: string } }) {
   return (
     <AppLink to={`/admin/users/${user.id}`} state={from} className="flex min-w-0 items-center gap-3 rounded-md focus-ring">
-      <Avatar id={user.id} name={user.displayName} avatar={user.avatar} avatarColor={user.avatarColor} size={36} />
+      {/* a list of animated avatars stays still: only the poster frame is downloaded */}
+      <Avatar id={user.id} name={user.displayName} avatar={user.avatar} poster={user.avatarPoster} frozen avatarColor={user.avatarColor} size={36} />
       <span className="min-w-0">
         <span className="block truncate text-body font-medium text-text-primary">{user.displayName}</span>
         <span className="block truncate text-caption text-text-muted">@{user.username}</span>
@@ -117,7 +118,11 @@ export function UsersPage() {
                   <AdminTd><Badge value={u.status} /></AdminTd>
                   <AdminTd><Badge value={u.role} /></AdminTd>
                   <AdminTd className="whitespace-nowrap">{formatDateShort(u.createdAt, language)}</AdminTd>
-                  <AdminTd className="whitespace-nowrap">{lastSeenLabel(u, t('ui.online'), language)}</AdminTd>
+                  <AdminTd className="whitespace-nowrap">
+                    {u.online
+                      ? <span className="inline-flex items-center gap-1.5 font-medium text-green"><span aria-hidden className="size-2 rounded-full bg-green" />{t('ui.online')}</span>
+                      : lastSeenLabel(u, t('ui.online'), language)}
+                  </AdminTd>
                   <AdminTd><RowActions user={u} /></AdminTd>
                 </AdminTr>
               ))}

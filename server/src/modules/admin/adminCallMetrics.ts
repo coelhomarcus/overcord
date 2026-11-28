@@ -7,7 +7,9 @@ import { answeredDmConversationIds } from '../calls/dmCalls.js';
 import { participants } from '../presence/participants.js';
 
 const log = logger.child({ component: 'admin-call-metrics' });
-const TIME_ZONE = 'America/Belem';
+/** The calendar every admin chart counts its days in. */
+export const ADMIN_METRICS_TIME_ZONE = 'America/Belem';
+const TIME_ZONE = ADMIN_METRICS_TIME_ZONE;
 const HISTORY_DAYS = 7;
 const DAY_MS = 86_400_000;
 const calendar = new Intl.DateTimeFormat('en', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -29,10 +31,10 @@ function dayLabel(utc: number): string {
   return new Date(utc).toISOString().slice(0, 10);
 }
 
-export function adminMetricsDays(now: Date): string[] {
+export function adminMetricsDays(now: Date, length = HISTORY_DAYS): string[] {
   const today = metricsDayStart(now);
-  return Array.from({ length: HISTORY_DAYS }, (_, index) =>
-    dayLabel(today - (HISTORY_DAYS - 1 - index) * DAY_MS));
+  return Array.from({ length }, (_, index) =>
+    dayLabel(today - (length - 1 - index) * DAY_MS));
 }
 
 function callCounts() {

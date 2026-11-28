@@ -84,7 +84,7 @@ function UserDetail({ id, viewerId }: { id: string; viewerId: string }) {
       {refreshFailed && <RefreshFailedNotice refreshing={refreshing} onRetry={() => void refresh()} />}
 
       <AdminEntityHeader
-        avatar={<Avatar id={user.id} name={user.displayName} avatar={user.avatar} avatarColor={user.avatarColor} size={64} />}
+        avatar={<Avatar id={user.id} name={user.displayName} avatar={user.avatar} poster={user.avatarPoster} avatarColor={user.avatarColor} size={72} />}
         title={user.displayName}
         subtitle={`@${user.username}`}
         id={user.id}

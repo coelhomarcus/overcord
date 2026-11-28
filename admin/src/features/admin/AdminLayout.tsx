@@ -46,11 +46,15 @@ export function AdminLayout({ viewer, onSignOut, signingOut, signOutFailed }: {
   }, [pathname]);
 
   const account = (
-    <div className="flex min-w-0 items-center gap-2">
-      <span aria-hidden className="hidden shrink-0 min-[440px]:flex">
-        <Avatar id={viewer.id} name={viewer.username} avatar={viewer.avatar ?? ''} avatarColor={viewer.avatarColor} size={28} />
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span aria-hidden className="relative hidden shrink-0 min-[440px]:flex">
+        <Avatar id={viewer.id} name={viewer.username} avatar={viewer.avatar ?? ''} avatarColor={viewer.avatarColor} size={wide ? 34 : 28} />
+        <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-surface-rail bg-green" />
       </span>
-      <span className="hidden min-w-0 flex-1 truncate text-label text-text-secondary min-[360px]:block" title={`@${viewer.username}`}>@{viewer.username}</span>
+      <span className="hidden min-w-0 flex-1 flex-col min-[360px]:flex">
+        <span className="truncate text-label font-semibold text-text-primary" title={`@${viewer.username}`}>@{viewer.username}</span>
+        {wide && <span className="truncate text-caption text-text-muted">{t('status.admin')}</span>}
+      </span>
       <Button type="button" variant="ghost" size="icon" className="text-text-muted" aria-label={t('site.signOut')} title={t('site.signOut')} disabled={signingOut} onClick={onSignOut}>
         <SignOutIcon aria-hidden className="size-4" />
       </Button>
@@ -60,9 +64,9 @@ export function AdminLayout({ viewer, onSignOut, signingOut, signOutFailed }: {
   return (
     <div ref={areaRef} className="flex h-full min-h-0 min-w-0">
       <aside className="admin-sidebar hidden w-64 shrink-0 flex-col min-[960px]:flex">
-        <Link to={ADMIN_PATH} className="mx-3 my-4 flex min-h-10 shrink-0 items-center rounded-md px-3 focus-ring"><AdminBrand /></Link>
+        <Link to={ADMIN_PATH} className="mx-3 mt-5 mb-3 flex min-h-10 shrink-0 items-center rounded-md px-2.5 focus-ring"><AdminBrand /></Link>
         <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-5"><AdminNavigation /></div>
-        {wide && <div className="shrink-0 border-t border-border-divider px-4 py-3">{account}</div>}
+        {wide && <div className="m-3 mt-0 shrink-0 rounded-xl border border-border-divider bg-fill-subtle px-3 py-2.5">{account}</div>}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="admin-topbar flex min-h-14 shrink-0 items-center justify-between gap-3 px-3 min-[960px]:hidden">

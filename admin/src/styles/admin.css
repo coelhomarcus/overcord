@@ -6,7 +6,9 @@
 @layer components {
   .admin-sidebar {
     border-right: 1px solid var(--color-border-divider);
-    background: var(--color-surface-rail);
+    background:
+      radial-gradient(120% 40% at 0% 0%, rgb(59 130 246 / 0.07), transparent 70%),
+      var(--color-surface-rail);
   }
 
   .admin-topbar {
@@ -15,15 +17,29 @@
   }
 
   .admin-nav-link {
+    position: relative;
     display: flex;
-    min-height: 2.375rem;
+    min-height: 2.5rem;
     align-items: center;
-    gap: 0.625rem;
-    border-radius: var(--radius-md);
-    padding: 0.5rem 0.75rem;
-    color: var(--color-text-secondary);
+    gap: 0.75rem;
+    border-radius: var(--radius-lg);
+    padding: 0.4375rem 0.625rem;
+    color: var(--color-text-muted);
     font-size: var(--text-label);
     font-weight: 500;
+    transition: background-color 150ms, color 150ms;
+  }
+
+  /* the icon sits on its own small tile, which takes the accent when the page is open */
+  .admin-nav-icon {
+    display: grid;
+    flex: none;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    background: var(--color-fill-subtle);
     transition: background-color 150ms, color 150ms;
   }
 
@@ -32,10 +48,29 @@
     background: var(--color-nav-hover);
   }
 
+  .admin-nav-link:hover .admin-nav-icon {
+    color: var(--color-text-strong);
+  }
+
   .admin-nav-link[aria-current="page"] {
     color: var(--color-text-strong);
     font-weight: 600;
     background: var(--color-nav-active);
+  }
+
+  .admin-nav-link[aria-current="page"] .admin-nav-icon {
+    color: #fff;
+    background: var(--color-accent-primary);
+  }
+
+  .admin-nav-link[aria-current="page"]::before {
+    content: '';
+    position: absolute;
+    inset-block: 0.625rem;
+    left: -0.75rem;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--color-accent-primary);
   }
 
   .admin-page-heading {
@@ -52,6 +87,18 @@
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-xl);
     background: var(--color-surface-panel);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -16px rgb(0 0 0 / 0.6);
+  }
+
+  /* a small square that carries a section's colour behind its icon */
+  .admin-icon-tile {
+    display: grid;
+    flex: none;
+    place-items: center;
+    border-radius: var(--radius-lg);
+    color: var(--tile-color, var(--color-accent-primary));
+    background: color-mix(in oklab, var(--tile-color, var(--color-accent-primary)) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tile-color, var(--color-accent-primary)) 28%, transparent);
   }
 
   .admin-card-inset {
@@ -112,5 +159,12 @@
   .admin-nav-drawer[data-ending-style] {
     translate: -100% 0;
     opacity: 0;
+  }
+}
+
+@layer components {
+  .admin-badge-tone {
+    border-color: color-mix(in oklab, var(--badge) 38%, transparent);
+    background: color-mix(in oklab, var(--badge) 14%, transparent);
   }
 }

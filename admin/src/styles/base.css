@@ -1,59 +1,74 @@
 @theme {
-  --color-surface-app: #141414;
-  --color-surface-rail: #101010;
-  --color-surface-panel: #191919;
-  --color-surface-raised: #202020;
-  --color-surface-overlay: #262626;
-  --color-surface-400: #383838;
-  --color-surface-500: #4b4b4b;
+  /* Cool near-black surfaces, one step apart, so panels read as layers. */
+  --color-surface-app: #0f1013;
+  --color-surface-rail: #0b0c0e;
+  --color-surface-panel: #17181b;
+  --color-surface-raised: #1e1f23;
+  --color-surface-overlay: #26272c;
+  --color-surface-400: #3a3c42;
+  --color-surface-500: #4d5058;
 
   --color-bg-primary: var(--color-surface-app);
-  --color-bg-textarea: #101010;
+  --color-bg-textarea: #0b0c0e;
   --color-bg-floating: var(--color-surface-overlay);
   --color-bg-modal: var(--color-surface-panel);
   --color-bg-control: var(--color-surface-raised);
   --color-bg-control-hover: var(--color-surface-overlay);
   --color-bg-hover: var(--color-surface-raised);
-  --color-bg-selected: #292929;
-  --color-fill-subtle: rgb(255 255 255 / 0.045);
-  --color-fill-hover: rgb(255 255 255 / 0.09);
-  --color-fill-active: rgb(255 255 255 / 0.14);
-  --color-fill-inset: rgb(0 0 0 / 0.2);
+  --color-bg-selected: #25272d;
+  --color-fill-subtle: rgb(255 255 255 / 0.04);
+  --color-fill-hover: rgb(255 255 255 / 0.08);
+  --color-fill-active: rgb(255 255 255 / 0.13);
+  --color-fill-inset: rgb(0 0 0 / 0.25);
   --color-nav-hover: var(--color-fill-hover);
-  --color-nav-active: var(--color-bg-selected);
+  --color-nav-active: rgb(57 135 229 / 0.14);
 
-  --color-text-strong: #f5f5f5;
-  --color-text-primary: #e5e5e5;
-  --color-text-secondary: #c3c3c3;
-  --color-text-muted: #a3a3a3;
-  --color-text-faint: #909090;
+  --color-text-strong: #f6f7f9;
+  --color-text-primary: #e6e7ea;
+  --color-text-secondary: #c2c4ca;
+  --color-text-muted: #9a9ca5;
+  --color-text-faint: #868892;
 
-  --color-border-subtle: #292929;
-  --color-border-default: #303030;
-  --color-border-strong: #555555;
+  --color-border-subtle: #24252a;
+  --color-border-default: #2c2e33;
+  --color-border-strong: #50535b;
   --color-border-divider: var(--color-border-subtle);
   --color-border-field: var(--color-border-default);
   --color-border-control: var(--color-border-default);
-  --color-accent-primary: #ededed;
-  --color-accent-text: #e0e0e0;
-  --color-accent-hover: #ffffff;
-  --color-border-accent: #a3a3a3;
+  --color-accent-primary: #3b82f6;
+  --color-accent-text: #8fb9f5;
+  --color-accent-hover: #5b96f7;
+  --color-border-accent: #3b82f6;
   --color-link: var(--color-accent-text);
 
-  --color-green: #9abbab;
-  --color-red: #a34049;
-  --color-red-hover: #8d353d;
-  --color-red-text: #dfa6ab;
-  --color-yellow: #d6bf90;
+  --color-green: #4cc38a;
+  --color-red: #c9414b;
+  --color-red-hover: #b0353e;
+  --color-red-text: #f2a0a6;
+  --color-yellow: #f0b84a;
+  --color-violet: #9085e9;
+  --color-blue: #3987e5;
 
-  --color-avatar-indigo: #3e3e3e;
-  --color-avatar-green: #4b4b4b;
-  --color-avatar-red: #454545;
-  --color-avatar-fuchsia: #505050;
-  --color-avatar-orange: #404040;
-  --color-avatar-purple: #484848;
-  --color-avatar-teal: #535353;
-  --color-avatar-blue: #434343;
+  /* Chart series, in this fixed order (validated for CVD and contrast on the panel surface).
+     Text never wears these: a swatch, line or bar beside the text carries the identity. */
+  --color-chart-1: #3987e5;
+  --color-chart-2: #d95926;
+  --color-chart-3: #199e70;
+  --color-chart-4: #c98500;
+  --color-chart-grid: #26282d;
+  /* State, reserved for marks that say good / warning / critical, always beside a label. */
+  --color-state-good: #0ca30c;
+  --color-state-warning: #fab219;
+  --color-state-critical: #d03b3b;
+
+  --color-avatar-indigo: oklch(55% 0.150 275);
+  --color-avatar-green: oklch(55% 0.150 150);
+  --color-avatar-red: oklch(55% 0.150 25);
+  --color-avatar-fuchsia: oklch(55% 0.150 345);
+  --color-avatar-orange: oklch(55% 0.144 50);
+  --color-avatar-purple: oklch(55% 0.150 310);
+  --color-avatar-teal: oklch(55% 0.094 190);
+  --color-avatar-blue: oklch(55% 0.138 245);
 
   --text-micro: 0.6875rem;
   --text-micro--line-height: 1.2;
@@ -75,7 +90,7 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
-  --radius-xl: 10px;
+  --radius-xl: 12px;
   --shadow-popover: none;
   --default-transition-duration: 150ms;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -208,7 +223,7 @@ html, body {
   --popover: var(--color-bg-floating);
   --popover-foreground: var(--color-text-primary);
   --primary: var(--color-accent-primary);
-  --primary-foreground: #171717;
+  --primary-foreground: #ffffff;
   --secondary: var(--color-bg-selected);
   --secondary-foreground: var(--color-text-primary);
   --muted: var(--color-bg-hover);

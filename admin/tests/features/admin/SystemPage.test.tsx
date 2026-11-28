@@ -98,7 +98,7 @@ describe('SystemPage storage capacity', () => {
     mocked.fetchSystem.mockResolvedValue(info({ storage: { usedBytes: 512, maxBytes: 0, files: 1 } }));
     open();
     expect(await screen.findByText('512 B em uso. O limite de armazenamento não foi informado.')).toBeInTheDocument();
-    expect(screen.queryByRole('meter')).not.toBeInTheDocument();
+    expect(screen.queryByRole('meter', { name: 'Armazenamento da instância' })).not.toBeInTheDocument();
   });
 });
 
