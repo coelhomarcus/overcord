@@ -4,7 +4,7 @@ import { sendJson, sendError, jsonBody } from '../../http/respond.js';
 import type { ErrorCode } from '../../http/errors.js';
 import * as floodControl from '../../realtime/floodControl.js';
 import { requireAdmin, requireAdminSession } from './adminAuth.js';
-import { confirmPassword, sendCurrentEmailCode, verifyCurrentEmailCode } from '../auth/accountConfirmation.js';
+import { confirmPassword, sendCurrentEmailCode, verifyCurrentEmailCode, type CurrentEmailPurpose } from '../auth/accountConfirmation.js';
 import { findById } from '../users/users.js';
 import { normalizeReason } from './adminPolicy.js';
 import { listAudit } from './auditLog.js';
@@ -21,7 +21,7 @@ import { claimReport, getAdminReport, listAdminReports, resolveReport, type Repo
 import { getSystemInfo } from './adminSystem.js';
 import { getAdminCallMetrics } from './adminCallMetrics.js';
 import { SweepInProgressError, sweepOrphans } from '../attachments/orphanSweeper.js';
-import { getBackupInfo, handleBackupDownload, issueDownloadToken, pgDumpAvailable } from '../backups/backupDownload.js';
+import { backupRunning, getBackupInfo, handleBackupDownload, issueDownloadToken, pgDumpAvailable } from '../backups/backupDownload.js';
 import type { ReportAction } from '../reports/reportsPolicy.js';
 import { isBadgeId } from '../badges/badgeCatalog.js';
 
@@ -84,6 +84,28 @@ async function mutating(request: FastifyRequest, reply: FastifyReply) {
   return { actor, reason, body, session };
 }
 
+type Mutating = NonNullable<Awaited<ReturnType<typeof mutating>>>;
+type StepUpPurpose = Extract<CurrentEmailPurpose, 'admin_role_change' | 'admin_backup'>;
+
+// What a stolen panel session must not be able to do on its own: the acting admin's current password, then a
+// code sent to their address, bound to this session, the action, its target and the written reason.
+const stepUpScope = (m: Mutating, action: string, targetId: string) =>
+  crypto.createHash('sha256').update(JSON.stringify([m.session.tokenHash, action, targetId, m.reason])).digest('hex');
+
+/** The first step: checks the password and sends the code, answering `{ codeRequired, email }`. */
+async function sendStepUpCode(reply: FastifyReply, m: Mutating, purpose: StepUpPurpose, scope: string): Promise<void> {
+  if (!await confirmPassword(reply, m.session, String(m.body.password ?? ''))) return;
+  const user = await findById(m.actor.id);
+  if (user?.role !== 'admin' || user.status !== 'active' || !user.twoFactorEmail) {
+    return sendError(reply, 403, 'forbidden', 'Você não tem mais permissão de administrador.');
+  }
+  return sendCurrentEmailCode(reply, user, purpose, scope);
+}
+
+/** The second step: the body's `code`. Answers the request itself when it is refused. */
+const verifyStepUp = (request: FastifyRequest, reply: FastifyReply, m: Mutating, purpose: StepUpPurpose, scope: string) =>
+  verifyCurrentEmailCode(request, reply, m.session, purpose, scope);
+
 async function reading<T>(request: FastifyRequest, reply: FastifyReply, run: () => Promise<T | 'invalid_cursor' | null>): Promise<void> {
   if (!(await requireAdmin(request, reply))) return;
   const result = await run();
@@ -113,21 +135,13 @@ export function registerAdminRoutes(fastify: FastifyInstance): void {
   });
   for (const action of ['grant', 'revoke'] as const) {
     const path = `/api/admin/users/:id/${action}-admin`;
-    const codeScope = (tokenHash: string, id: string, reason: string) =>
-      crypto.createHash('sha256').update(JSON.stringify([tokenHash, action, id, reason])).digest('hex');
-
     fastify.post(`${path}/request`, async (request: FastifyRequest<{ Params: IdParams }>, reply) => {
       const m = await mutating(request, reply);
-      if (!m || !await confirmPassword(reply, m.session, String(m.body.password ?? ''))) return;
-      const user = await findById(m.actor.id);
-      if (user?.role !== 'admin' || user.status !== 'active' || !user.twoFactorEmail) {
-        return sendError(reply, 403, 'forbidden', 'Você não tem mais permissão de administrador.');
-      }
-      return sendCurrentEmailCode(reply, user, 'admin_role_change', codeScope(m.session.tokenHash, request.params.id, m.reason));
+      if (m) await sendStepUpCode(reply, m, 'admin_role_change', stepUpScope(m, action, request.params.id));
     });
     fastify.post(path, async (request: FastifyRequest<{ Params: IdParams }>, reply) => {
       const m = await mutating(request, reply);
-      if (!m || !await verifyCurrentEmailCode(request, reply, m.session, 'admin_role_change', codeScope(m.session.tokenHash, request.params.id, m.reason))) return;
+      if (!m || !await verifyStepUp(request, reply, m, 'admin_role_change', stepUpScope(m, action, request.params.id))) return;
       respond(reply, await setAdminRole({ actor: m.actor, reason: m.reason, requestId: request.id }, request.params.id, action));
     });
   }
@@ -226,12 +240,30 @@ export function registerAdminRoutes(fastify: FastifyInstance): void {
     await runSweep(reply, { dryRun: false, actor: m.actor, requestId: request.id, reason: m.reason });
   });
 
-  // A full backup: the page's numbers, a one-time link (needs a reason) and the ZIP it streams. See backupDownload.ts.
+  // A full backup: the page's numbers, a one-time link and the ZIP it streams. See backupDownload.ts. The ZIP holds
+  // every account and message, so the link needs a reason, the password and an emailed code, like the role changes.
   fastify.get('/api/admin/backup', (request, reply) => reading(request, reply, () => getBackupInfo()));
+  // Checked before a code is sent and again before it is spent, so a refusal never wastes one.
+  const backupRefusal = async (reply: FastifyReply): Promise<boolean> => {
+    if (!(await pgDumpAvailable())) {
+      sendError(reply, 503, 'backup_unavailable', 'O servidor não tem o pg_dump instalado; não é possível gerar o backup.');
+      return true;
+    }
+    if (backupRunning()) {
+      sendError(reply, 409, 'backup_running', 'Outro backup está sendo baixado. Espere ele terminar.');
+      return true;
+    }
+    return false;
+  };
+  fastify.post('/api/admin/backup/download/request', async (request, reply) => {
+    const m = await mutating(request, reply);
+    if (!m || await backupRefusal(reply)) return;
+    await sendStepUpCode(reply, m, 'admin_backup', stepUpScope(m, 'backup', ''));
+  });
   fastify.post('/api/admin/backup/download', async (request, reply) => {
     const m = await mutating(request, reply);
-    if (!m) return;
-    if (!(await pgDumpAvailable())) return sendError(reply, 503, 'backup_unavailable', 'O servidor não tem o pg_dump instalado; não é possível gerar o backup.');
+    if (!m || await backupRefusal(reply)) return;
+    if (!await verifyStepUp(request, reply, m, 'admin_backup', stepUpScope(m, 'backup', ''))) return;
     const issued = issueDownloadToken(m.actor, m.reason);
     if (issued.code === 'busy') return sendError(reply, 409, 'backup_running', 'Outro backup está sendo baixado. Espere ele terminar.');
     sendJson(reply, 200, { url: `/api/admin/backup/download/${issued.token}`, expiresAt: issued.expiresAt.toISOString() });

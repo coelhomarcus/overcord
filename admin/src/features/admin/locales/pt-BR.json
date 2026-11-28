@@ -637,7 +637,7 @@
     "unavailable": "O servidor não tem o pg_dump instalado, então não é possível gerar o backup. Veja \"Backups\" no guia de deploy.",
     "running": "{{name}} está baixando um backup desde {{when}}. Só um backup roda por vez.",
     "dialogTitle": "Baixar backup completo",
-    "dialogDescription": "O arquivo terá hashes de senha, sessões e todas as mensagens da instância. Guarde-o como o próprio banco de dados e criptografe-o ao tirá-lo desta máquina.",
+    "dialogDescription": "O arquivo terá hashes de senha, sessões e todas as mensagens da instância. Guarde-o como o próprio banco de dados e criptografe-o ao tirá-lo desta máquina. Para baixar, confirme com sua senha e um código enviado ao seu e-mail.",
     "dialogConfirm": "Baixar",
     "contentsTitle": "O que contém",
     "contentsDescription": "Tudo o que é preciso para recriar a instância, menos os segredos de configuração.",

@@ -83,6 +83,8 @@ describe('matrix: admin routes', () => {
     ['resolve report', 'POST', '/api/admin/reports/x/resolve'],
     ['System tab', 'GET', '/api/admin/system'],
     ['sweep orphans', 'POST', '/api/admin/system/sweep-orphans'],
+    ['request backup code', 'POST', '/api/admin/backup/download/request'],
+    ['backup link', 'POST', '/api/admin/backup/download'],
     ['audit', 'GET', '/api/admin/audit'],
   ];
   const body = { reason: 'valid reason for the test', dryRun: true };

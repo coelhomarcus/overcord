@@ -42,27 +42,35 @@ describe('BackupPage', () => {
     expect(screen.getByText('Nenhum backup baixado ainda.')).toBeInTheDocument();
   });
 
-  it('asks for a reason, then hands the one-time link to the browser as a download', async () => {
+  it('asks for a reason, the password and an emailed code, then hands the one-time link to the browser', async () => {
     const u = userEvent.setup();
+    mocked.requestBackupCode.mockResolvedValue({ codeRequired: true, email: 'm***@example.com' });
     mocked.requestBackupDownload.mockResolvedValue({ url: '/api/admin/backup/download/tok', expiresAt: '2026-11-26T10:01:00.000Z' });
     open();
     await u.click(await screen.findByRole('button', { name: 'Baixar backup' }));
     expect(await screen.findByRole('dialog')).toHaveTextContent('hashes de senha');
     await u.type(screen.getByLabelText(/Motivo/), 'before upgrade');
+    await u.type(screen.getByLabelText('Senha atual'), 'secret');
+    await u.click(screen.getByRole('button', { name: 'Enviar código' }));
+    expect(mocked.requestBackupCode).toHaveBeenCalledWith('before upgrade', 'secret');
+    expect(mocked.requestBackupDownload).not.toHaveBeenCalled();
+    await u.type(await screen.findByLabelText('Código de verificação'), '123456');
     await u.click(screen.getByRole('button', { name: 'Baixar' }));
-    await waitFor(() => expect(mocked.requestBackupDownload).toHaveBeenCalledWith('before upgrade'));
+    await waitFor(() => expect(mocked.requestBackupDownload).toHaveBeenCalledWith('before upgrade', '123456'));
     expect(clicked).toEqual(['/api/admin/backup/download/tok download=true']);
     expect(await screen.findByText(/O download começou no seu navegador/)).toBeInTheDocument();
   });
 
   it('explains a refusal in the dialog and starts nothing', async () => {
     const u = userEvent.setup();
-    mocked.requestBackupDownload.mockRejectedValue(new ApiError(409, 'backup_running', 'Outro backup está sendo baixado.'));
+    mocked.requestBackupCode.mockRejectedValue(new ApiError(409, 'backup_running', 'Outro backup está sendo baixado.'));
     open();
     await u.click(await screen.findByRole('button', { name: 'Baixar backup' }));
     await u.type(screen.getByLabelText(/Motivo/), 'again');
-    await u.click(screen.getByRole('button', { name: 'Baixar' }));
+    await u.type(screen.getByLabelText('Senha atual'), 'secret');
+    await u.click(screen.getByRole('button', { name: 'Enviar código' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Outro backup está sendo baixado. Espere ele terminar.');
+    expect(mocked.requestBackupDownload).not.toHaveBeenCalled();
     expect(clicked).toEqual([]);
   });
 

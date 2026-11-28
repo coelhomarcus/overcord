@@ -191,6 +191,8 @@ export interface BackupInfo {
 
 export const fetchBackupInfo = () => adminFetch<BackupInfo>('/api/admin/backup');
 /** A one-time link to the ZIP, valid for a minute and only for this admin. */
-export const requestBackupDownload = (reason: string) => post<{ url: string; expiresAt: string }>('/api/admin/backup/download', { reason });
+export const requestBackupCode = (reason: string, password: string) =>
+  post<{ codeRequired: true; email: string }>('/api/admin/backup/download/request', { reason, password });
+export const requestBackupDownload = (reason: string, code: string) => post<{ url: string; expiresAt: string }>('/api/admin/backup/download', { reason, code });
 export const sweepOrphans = (input: { dryRun: true } | { dryRun: false; reason: string }) =>
   adminFetch<{ result: SweepResult }>('/api/admin/system/sweep-orphans', { method: 'POST', body: JSON.stringify(input) });

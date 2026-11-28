@@ -637,7 +637,7 @@
     "unavailable": "The server does not have pg_dump installed, so it cannot make a backup. See \"Backups\" in the deployment guide.",
     "running": "{{name}} has been downloading a backup since {{when}}. Only one backup runs at a time.",
     "dialogTitle": "Download a full backup",
-    "dialogDescription": "The file will hold password hashes, sessions and every message on the instance. Keep it like the database itself, and encrypt it when it leaves this machine.",
+    "dialogDescription": "The file will hold password hashes, sessions and every message on the instance. Keep it like the database itself, and encrypt it when it leaves this machine. To download it, confirm with your password and a code sent to your email.",
     "dialogConfirm": "Download",
     "contentsTitle": "What it contains",
     "contentsDescription": "Everything needed to rebuild the instance, except the configuration secrets.",

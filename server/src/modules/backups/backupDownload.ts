@@ -19,7 +19,8 @@ const log = logger.child({ component: 'backup' });
 // A full backup downloaded from the admin site. The ZIP is built while it
 // downloads (backupZip.ts) and never stored. Getting it takes two steps:
 //   1. POST /api/admin/backup/download, a mutating admin action (origin check,
-//      rate limit, written reason), returns a link with a random token;
+//      rate limit, written reason) confirmed with the admin's password and an
+//      emailed code (`/request` sends it), returns a link with a random token;
 //   2. GET on that link streams the ZIP. A plain link is what a browser can
 //      download, but GETs are not origin-checked and the admin cookie is
 //      SameSite=Lax, so the token is what proves the admin asked for it: it
@@ -95,6 +96,11 @@ export async function getBackupInfo(): Promise<BackupInfo> {
     estimate: { databaseBytes: Number(database.rows[0]?.bytes ?? 0), uploadsBytes: usage.totalBytes, files: usage.totalFiles },
     recent: audit === 'invalid_cursor' ? [] : audit.items.slice(0, RECENT_DOWNLOADS),
   };
+}
+
+/** Whether a download is streaming right now: a new link would only be refused. */
+export function backupRunning(): boolean {
+  return running !== null;
 }
 
 export type IssueResult = { code: 'ok'; token: string; expiresAt: Date } | { code: 'busy' };

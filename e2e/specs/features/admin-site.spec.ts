@@ -254,6 +254,11 @@ test('an admin downloads a full backup of the instance as one ZIP', async ({ use
   await page.getByRole('button', { name: 'Baixar backup', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Baixar backup completo' });
   await dialog.getByRole('textbox', { name: 'Motivo (fica registrado na auditoria)', exact: true }).fill('Cópia antes da atualização');
+  await dialog.getByLabel('Senha atual', { exact: true }).fill(admin.password);
+  const email = emailOf(admin);
+  const seen = await emailCount(email);
+  await dialog.getByRole('button', { name: 'Enviar código', exact: true }).click();
+  await dialog.getByRole('textbox', { name: /Código de verificação/ }).fill(await waitForEmailCode(email, seen));
   const downloading = page.waitForEvent('download');
   await dialog.getByRole('button', { name: 'Baixar', exact: true }).click();
   const download = await downloading;

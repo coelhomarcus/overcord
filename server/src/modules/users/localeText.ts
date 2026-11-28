@@ -26,6 +26,7 @@ type TextKey =
   | 'email.passwordChangedAction'
   | 'email.exportCodeSubject' | 'email.exportCodeTitle' | 'email.exportCodeIntro'
   | 'email.adminRoleSubject' | 'email.adminRoleTitle' | 'email.adminRoleIntro'
+  | 'email.adminBackupSubject' | 'email.adminBackupTitle' | 'email.adminBackupIntro'
   | 'server.textCategory' | 'server.textChannel' | 'server.voiceCategory' | 'server.voiceChannel';
 
 const TEXT: Record<Locale, Record<TextKey, string>> = {
@@ -90,6 +91,8 @@ const TEXT: Record<Locale, Record<TextKey, string>> = {
     'email.exportCodeIntro': 'Use este código para pedir uma cópia dos dados da conta "{{username}}". Se não foi você, troque sua senha agora:',
     'email.adminRoleSubject': 'Confirme a alteração de acesso administrativo', 'email.adminRoleTitle': 'Alteração de acesso administrativo',
     'email.adminRoleIntro': 'Use este código no painel para confirmar a concessão ou remoção de acesso solicitada por "{{username}}". Se não foi você, troque sua senha agora:',
+    'email.adminBackupSubject': 'Confirme o download do backup completo', 'email.adminBackupTitle': 'Backup completo da instância',
+    'email.adminBackupIntro': 'Use este código no painel para confirmar o download do backup completo (banco de dados e arquivos) pedido por "{{username}}". Se não foi você, troque sua senha agora:',
     'server.textCategory': 'Canais de texto', 'server.textChannel': 'geral',
     'server.voiceCategory': 'Canais de voz', 'server.voiceChannel': 'Geral',
   },
@@ -154,6 +157,8 @@ const TEXT: Record<Locale, Record<TextKey, string>> = {
     'email.exportCodeIntro': 'Use this code to ask for a copy of the data of the account "{{username}}". If it was not you, change your password now:',
     'email.adminRoleSubject': 'Confirm the administrator access change', 'email.adminRoleTitle': 'Administrator access change',
     'email.adminRoleIntro': 'Use this code in the administration site to confirm the access change requested by "{{username}}". If it was not you, change your password now:',
+    'email.adminBackupSubject': 'Confirm the full backup download', 'email.adminBackupTitle': 'Full instance backup',
+    'email.adminBackupIntro': 'Use this code in the administration site to confirm the full backup download (database and files) requested by "{{username}}". If it was not you, change your password now:',
     'server.textCategory': 'Text Channels', 'server.textChannel': 'general',
     'server.voiceCategory': 'Voice Channels', 'server.voiceChannel': 'General',
   },
