@@ -22,7 +22,7 @@ type ReasonDialogProps = {
   onSubmit?: never;
   verification: {
     requestCode: (reason: string, password: string) => Promise<{ email: string }>;
-    onConfirm: (reason: string, code: string) => Promise<void>;
+    onConfirm: (reason: string, code: string, confirm: string) => Promise<void>;
   };
 });
 
@@ -73,7 +73,7 @@ export function ReasonDialog({ open, onOpenChange, title, description, confirmLa
         setPassword('');
         return;
       }
-      if (verification) await verification.onConfirm(normalizedReason, code);
+      if (verification) await verification.onConfirm(normalizedReason, code, confirm.trim());
       else await onSubmit(normalizedReason, confirm.trim());
       finish();
     } catch (err) {

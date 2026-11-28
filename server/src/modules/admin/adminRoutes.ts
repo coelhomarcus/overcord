@@ -48,6 +48,7 @@ const ERRORS: Record<string, [number, ErrorCode, string]> = {
   invalid_action: [400, 'invalid_action', 'Essa ação não se aplica a esse tipo de denúncia.'],
   action_failed: [409, 'action_failed', 'Não foi possível aplicar a ação; a denúncia continua aberta.'],
   busy: [409, 'conflict', 'Outra decisão sobre esta denúncia está em andamento. Atualize e confira o resultado.'],
+  admin_confirmation_required: [403, 'admin_confirmation_required', 'Para agir sobre outro administrador, confirme com sua senha e um código enviado ao seu e-mail.'],
 };
 
 async function runSweep(reply: FastifyReply, opts: Parameters<typeof sweepOrphans>[0]): Promise<void> {
@@ -85,7 +86,7 @@ async function mutating(request: FastifyRequest, reply: FastifyReply) {
 }
 
 type Mutating = NonNullable<Awaited<ReturnType<typeof mutating>>>;
-type StepUpPurpose = Extract<CurrentEmailPurpose, 'admin_role_change' | 'admin_backup'>;
+type StepUpPurpose = Extract<CurrentEmailPurpose, 'admin_role_change' | 'admin_backup' | 'admin_account_action'>;
 
 // What a stolen panel session must not be able to do on its own: the acting admin's current password, then a
 // code sent to their address, bound to this session, the action, its target and the written reason.
@@ -106,6 +107,16 @@ async function sendStepUpCode(reply: FastifyReply, m: Mutating, purpose: StepUpP
 const verifyStepUp = (request: FastifyRequest, reply: FastifyReply, m: Mutating, purpose: StepUpPurpose, scope: string) =>
   verifyCurrentEmailCode(request, reply, m.session, purpose, scope);
 
+type AdminAccountAction = 'suspend' | 'delete';
+
+/** Suspending or deleting ANOTHER administrator asks the step-up too (the action re-checks the role under its
+ * locks). true: confirmed; false: not needed here; null: refused, and the request was answered. */
+async function confirmAdminTarget(request: FastifyRequest, reply: FastifyReply, m: Mutating, action: AdminAccountAction, targetId: string): Promise<boolean | null> {
+  const target = await findById(targetId);
+  if (target?.role !== 'admin' || target.id === m.actor.id) return false;
+  return (await verifyStepUp(request, reply, m, 'admin_account_action', stepUpScope(m, action, targetId))) ? true : null;
+}
+
 async function reading<T>(request: FastifyRequest, reply: FastifyReply, run: () => Promise<T | 'invalid_cursor' | null>): Promise<void> {
   if (!(await requireAdmin(request, reply))) return;
   const result = await run();
@@ -121,9 +132,22 @@ export function registerAdminRoutes(fastify: FastifyInstance): void {
   }));
   fastify.get('/api/admin/users/:id', (request: FastifyRequest<{ Params: IdParams }>, reply) => reading(request, reply, () => getAdminUser(request.params.id)));
 
+  for (const action of ['suspend', 'delete'] as const) {
+    fastify.post(`/api/admin/users/:id/${action}/request`, async (request: FastifyRequest<{ Params: IdParams }>, reply) => {
+      const m = await mutating(request, reply);
+      if (!m) return;
+      const target = await findById(request.params.id);
+      if (!target) return sendError(reply, 404, 'not_found', 'Não encontrado.');
+      if (target.role !== 'admin') return sendError(reply, 409, 'not_admin', 'Essa conta não é administradora.');
+      await sendStepUpCode(reply, m, 'admin_account_action', stepUpScope(m, action, target.id));
+    });
+  }
   fastify.post('/api/admin/users/:id/suspend', async (request: FastifyRequest<{ Params: IdParams }>, reply) => {
     const m = await mutating(request, reply);
-    if (m) respond(reply, await suspendUser({ actor: m.actor, reason: m.reason, requestId: request.id }, request.params.id));
+    if (!m) return;
+    const adminConfirmed = await confirmAdminTarget(request, reply, m, 'suspend', request.params.id);
+    if (adminConfirmed === null) return;
+    respond(reply, await suspendUser({ actor: m.actor, reason: m.reason, requestId: request.id }, request.params.id, { adminConfirmed }));
   });
   fastify.post('/api/admin/users/:id/reactivate', async (request: FastifyRequest<{ Params: IdParams }>, reply) => {
     const m = await mutating(request, reply);
@@ -155,7 +179,10 @@ export function registerAdminRoutes(fastify: FastifyInstance): void {
   }
   fastify.delete('/api/admin/users/:id', async (request: FastifyRequest<{ Params: IdParams }>, reply) => {
     const m = await mutating(request, reply);
-    if (m) respond(reply, await deleteUserAccount({ actor: m.actor, reason: m.reason, requestId: request.id }, request.params.id, String(m.body.confirm ?? '')));
+    if (!m) return;
+    const adminConfirmed = await confirmAdminTarget(request, reply, m, 'delete', request.params.id);
+    if (adminConfirmed === null) return;
+    respond(reply, await deleteUserAccount({ actor: m.actor, reason: m.reason, requestId: request.id }, request.params.id, String(m.body.confirm ?? ''), { adminConfirmed }));
   });
 
   fastify.get('/api/admin/servers', (request: FastifyRequest<{ Querystring: Query }>, reply) => reading(request, reply, () => {

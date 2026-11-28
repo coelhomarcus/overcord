@@ -21,7 +21,16 @@ import type { BadgeId } from '../badges/badgeCatalog.js';
 
 const log = logger.child({ component: 'admin' });
 
-export type UserActionResult<T = object> = ({ code: 'ok' } & T) | { code: 'not_found' | 'forbidden' | 'confirmation_mismatch' | Exclude<UserActionDecision, 'allow'> };
+export type UserActionResult<T = object> = ({ code: 'ok' } & T)
+  | { code: 'not_found' | 'forbidden' | 'confirmation_mismatch' | 'admin_confirmation_required' | Exclude<UserActionDecision, 'allow'> };
+
+/** `adminConfirmed`: the actor confirmed with their password and an emailed code. Suspending or deleting
+ * another administrator takes the panel away from them as removing the role does, so it needs the same
+ * proof. It is checked under the row locks, so a role granted in between cannot slip past it. */
+interface AdminTargetCheck { adminConfirmed?: boolean }
+
+const needsAdminConfirmation = (target: { id: string; role: string }, actorId: string, { adminConfirmed = false }: AdminTargetCheck) =>
+  target.role === 'admin' && target.id !== actorId && !adminConfirmed;
 
 export const CLI_ACTOR_ID = 'cli';
 
@@ -44,13 +53,14 @@ async function lockAdminsAndTarget(tx: Parameters<Parameters<typeof db.transacti
   return { activeAdminCount: admins.filter((a) => a.status === 'active').length, target, actorStillAdmin };
 }
 
-export async function suspendUser(ctx: Ctx, targetId: string): Promise<UserActionResult> {
+export async function suspendUser(ctx: Ctx, targetId: string, check: AdminTargetCheck = {}): Promise<UserActionResult> {
   const outcome = await db.transaction(async (tx): Promise<UserActionResult<{ revokedInvitationIds: string[] }>> => {
     const { activeAdminCount, target, actorStillAdmin } = await lockAdminsAndTarget(tx, targetId, ctx.actor.id);
     if (!actorStillAdmin) return { code: 'forbidden' };
     if (!target) return { code: 'not_found' };
     const decision = decideUserAction({ action: 'suspend', actorId: ctx.actor.id, targetId, targetRole: target.role, targetStatus: target.status, activeAdminCount });
     if (decision !== 'allow') return { code: decision };
+    if (needsAdminConfirmation(target, ctx.actor.id, check)) return { code: 'admin_confirmation_required' };
     await tx.update(users).set({ status: 'suspended', statusReason: ctx.reason, statusChangedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, targetId));
     const revokedInvitationIds = await revokePendingForUser(tx, targetId);
     await recordAudit({ actor: ctx.actor, action: 'user.suspend', targetType: 'user', targetId, targetLabel: target.username, reason: ctx.reason, requestId: ctx.requestId }, tx);
@@ -236,14 +246,16 @@ export async function purgeUserAccount(ctx: PurgeCtx, targetId: string, check: P
 }
 
 /** An admin deleting someone else's account, confirmed by typing its username. */
-export async function deleteUserAccount(ctx: Ctx, targetId: string, confirm: string): Promise<UserActionResult> {
+export async function deleteUserAccount(ctx: Ctx, targetId: string, confirm: string, check: AdminTargetCheck = {}): Promise<UserActionResult> {
   const [known] = await db.select({ username: users.username }).from(users).where(eq(users.id, targetId)).limit(1);
   if (!known) return { code: 'not_found' };
   if (confirm.trim().toLowerCase() !== known.username.toLowerCase()) return { code: 'confirmation_mismatch' };
   const result = await purgeUserAccount(ctx, targetId, ({ target, activeAdminCount, actorStillAdmin }) => {
     if (!actorStillAdmin) return 'forbidden';
-    const decision = decideUserAction({ action: 'delete', actorId: ctx.actor?.id ?? CLI_ACTOR_ID, targetId, targetRole: target.role, targetStatus: target.status, activeAdminCount });
-    return decision === 'allow' ? 'ok' : decision;
+    const actorId = ctx.actor?.id ?? CLI_ACTOR_ID;
+    const decision = decideUserAction({ action: 'delete', actorId, targetId, targetRole: target.role, targetStatus: target.status, activeAdminCount });
+    if (decision !== 'allow') return decision;
+    return needsAdminConfirmation(target, actorId, check) ? 'admin_confirmation_required' : 'ok';
   });
   return result.code === 'ok' ? { code: 'ok' } : result;
 }

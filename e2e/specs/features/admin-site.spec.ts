@@ -221,6 +221,8 @@ test('granting and revoking administrator access each require the password and a
 
   const revokeButton = page.getByRole('button', { name: 'Remover admin', exact: true });
   await expect(revokeButton).toBeVisible();
+  // now an administrator: suspending them asks for the same confirmation as removing the role
+  expect((await page.request.post(`${ADMIN_URL}/api/admin/users/${member.id}/suspend`, { data: { reason }, headers: { origin: ADMIN_URL } })).status()).toBe(400);
   expect((await post('grant', grantCode)).status()).toBe(400);
   expect((await post('revoke')).status()).toBe(400);
   await revokeButton.click();

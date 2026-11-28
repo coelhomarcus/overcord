@@ -62,6 +62,8 @@ describe('matrix: admin routes', () => {
     ['list users', 'GET', '/api/admin/users'],
     ['user detail', 'GET', '/api/admin/users/x'],
     ['suspend user', 'POST', '/api/admin/users/x/suspend'],
+    ['request suspension code', 'POST', '/api/admin/users/x/suspend/request'],
+    ['request deletion code', 'POST', '/api/admin/users/x/delete/request'],
     ['reactivate user', 'POST', '/api/admin/users/x/reactivate'],
     ['revoke sessions', 'POST', '/api/admin/users/x/revoke-sessions'],
     ['grant admin', 'POST', '/api/admin/users/x/grant-admin'],

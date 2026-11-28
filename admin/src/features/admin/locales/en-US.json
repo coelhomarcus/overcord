@@ -212,6 +212,7 @@
     "serverSuspended": "Server suspended"
   },
   "errors": {
+    "adminConfirmationRequired": "Acting on another administrator needs your password and a code. Refresh the page and try again.",
     "reasonRequired": "Enter a reason (3 to 500 characters).",
     "selfAction": "You cannot do this to your own account.",
     "lastAdmin": "This account is the last active administrator.",
@@ -290,6 +291,7 @@
     "user.revoke_badge": "Badge removed"
   },
   "detail": {
+    "adminTargetConfirmation": "As this account belongs to another administrator, confirm with your password and a code sent to your email.",
     "fullHistory": "Full history",
     "historyDescription": "Everything administration recorded about this account, newest action first.",
     "noHistory": "No actions recorded for this account",

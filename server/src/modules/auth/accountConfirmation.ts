@@ -89,6 +89,7 @@ const CURRENT_EMAIL_CODE_SEND_KEYS = {
   data_export: 'data-export-code',
   admin_role_change: 'admin-role-code',
   admin_backup: 'admin-backup-code',
+  admin_account_action: 'admin-account-code',
 } as const satisfies Partial<Record<AuthCodePurpose, string>>;
 export type CurrentEmailPurpose = keyof typeof CURRENT_EMAIL_CODE_SEND_KEYS;
 

@@ -41,6 +41,7 @@ export function describeAdminError(err: unknown): string {
       case ERROR_CODES.backup_link_expired: return i18n.t('admin:errors.backupLinkExpired');
       case ERROR_CODES.backup_unavailable: return i18n.t('admin:errors.backupUnavailable');
       case ERROR_CODES.not_member: return i18n.t('admin:errors.notMember');
+      case ERROR_CODES.admin_confirmation_required: return i18n.t('admin:errors.adminConfirmationRequired');
       case ERROR_CODES.forbidden: return i18n.t('admin:errors.forbidden');
       case ERROR_CODES.rate_limited: return i18n.t('admin:errors.rateLimited');
       default: return describeApiError(err, 'admin:errors.generic');

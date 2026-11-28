@@ -79,6 +79,37 @@ describe('UserDetailPage', () => {
     expect(screen.getByRole('button', { name: 'Excluir conta' })).toBeDisabled();
   });
 
+  it('suspending or deleting another administrator also asks for the password and an emailed code', async () => {
+    const u = userEvent.setup();
+    mocked.fetchAdminUser.mockResolvedValue(detail({ role: 'admin' }));
+    mocked.requestAdminAccountCode.mockResolvedValue({ codeRequired: true, email: 'a**@example.com' });
+    mocked.suspendUser.mockResolvedValue({ ok: true });
+    mocked.deleteUser.mockResolvedValue({ ok: true });
+    openModeration();
+
+    await u.click(await screen.findByRole('button', { name: 'Suspender' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent('outro administrador');
+    await u.type(screen.getByLabelText(/Motivo/), 'compromised account');
+    await u.type(screen.getByLabelText('Senha atual'), 'current password');
+    await u.click(screen.getByRole('button', { name: 'Enviar código' }));
+    await waitFor(() => expect(mocked.requestAdminAccountCode).toHaveBeenCalledWith('u1', 'suspend', 'compromised account', 'current password'));
+    expect(mocked.suspendUser).not.toHaveBeenCalled();
+    await u.type(await screen.findByLabelText('Código de verificação'), '246810');
+    await u.click(screen.getAllByRole('button', { name: 'Suspender' }).at(-1)!);
+    await waitFor(() => expect(mocked.suspendUser).toHaveBeenCalledWith('u1', 'compromised account', '246810'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await u.click(screen.getByRole('button', { name: 'Excluir conta' }));
+    await u.type(screen.getByLabelText(/Motivo/), 'compromised account');
+    await u.type(screen.getByLabelText(/Para confirmar/), 'ana');
+    await u.type(screen.getByLabelText('Senha atual'), 'current password');
+    await u.click(screen.getByRole('button', { name: 'Enviar código' }));
+    await waitFor(() => expect(mocked.requestAdminAccountCode).toHaveBeenCalledWith('u1', 'delete', 'compromised account', 'current password'));
+    await u.type(await screen.findByLabelText('Código de verificação'), '135790');
+    await u.click(screen.getByRole('button', { name: 'Excluir para sempre' }));
+    await waitFor(() => expect(mocked.deleteUser).toHaveBeenCalledWith('u1', 'compromised account', 'ana', '135790'));
+  });
+
   it('nonexistent account shows a warning, without crashing', async () => {
     mocked.fetchAdminUser.mockRejectedValue(Object.assign(new Error('x'), { status: 404 }));
     open();

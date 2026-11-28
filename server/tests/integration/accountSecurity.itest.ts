@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, afterEach, before, beforeEach, describe, it, mock } from 'node:test';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../../src/config/env.js';
 import { adminAuditLogs, authCodes, knownLogins, rateLimitWindows, sessions, users } from '../../src/db/schema.js';
@@ -168,6 +168,35 @@ describe('administrator authentication', () => {
     assert.equal((await post(path, otherToken, { code })).json().error.code, 'invalid_code');
     assert.equal((await post(path, token, { code })).json().error.code, 'self_action');
     assert.equal((await post(path, token, { code })).json().error.code, 'invalid_code');
+  });
+
+  it('asks the same confirmation to suspend or delete another administrator', async () => {
+    const actor = await makeAccount({ twoFactor: true });
+    const target = await makeAccount({ twoFactor: true });
+    const member = await makeAccount();
+    await db.update(users).set({ role: 'admin' }).where(inArray(users.id, [actor.id, target.id]));
+    const token = await makeAdminSession(actor.id);
+    const reason = 'Compromised administrator';
+    const send = (method: 'POST' | 'DELETE', url: string, body: Record<string, string>) => app.inject({
+      method, url, headers: adminHeaders(token), payload: { reason, ...body },
+    });
+    const errorOf = (res: Awaited<ReturnType<typeof send>>) => [res.statusCode, res.json().error?.code];
+    const suspend = `/api/admin/users/${target.id}/suspend`;
+
+    assert.deepEqual(errorOf(await send('POST', suspend, {})), [400, 'invalid_code'], 'a reason alone is not enough');
+    assert.deepEqual(errorOf(await send('POST', `/api/admin/users/${member.id}/suspend/request`, { password: PASSWORD })), [409, 'not_admin']);
+    assert.equal((await send('POST', `/api/admin/users/${member.id}/suspend`, {})).statusCode, 200, 'a regular account needs no code');
+
+    assert.equal((await send('POST', `${suspend}/request`, { password: PASSWORD })).statusCode, 200);
+    const code = lastCode();
+    assert.deepEqual(errorOf(await send('DELETE', `/api/admin/users/${target.id}`, { confirm: target.username, code })), [400, 'invalid_code'], 'a code is for one action');
+    assert.equal((await send('POST', suspend, { code })).statusCode, 200);
+    assert.equal((await db.select({ status: users.status }).from(users).where(eq(users.id, target.id)))[0]?.status, 'suspended');
+
+    assert.equal((await send('POST', `/api/admin/users/${target.id}/reactivate`, {})).statusCode, 200, 'reactivating asks no code');
+    assert.equal((await send('POST', `/api/admin/users/${target.id}/delete/request`, { password: PASSWORD })).statusCode, 200);
+    assert.equal((await send('DELETE', `/api/admin/users/${target.id}`, { confirm: target.username, code: lastCode() })).statusCode, 200);
+    assert.equal((await db.select({ id: users.id }).from(users).where(eq(users.id, target.id))).length, 0);
   });
 });
 
