@@ -56,13 +56,16 @@ test.describe('voice channels', () => {
         expect(Math.abs(button.y + button.height / 2 - tile.y - tile.height / 2)).toBeLessThan(1);
       }).toPass();
     };
-    await expectCenteredWatch(44);
+    await expectCenteredWatch(36);
+    // the share's own still sits behind the button until the viewer starts watching
+    await expect(share.locator('img[src^="data:image/"]')).toBeVisible();
     await a.page.getByRole('button', { name: `Destacar ${alice.username}`, exact: true }).click();
     await expect(a.page.locator('[data-thumb-strip]').getByRole('button', { name: `Assistir à transmissão de ${bob.username}`, exact: true })).toBeVisible();
-    await expectCenteredWatch(36);
+    await expectCenteredWatch(32);
     await expect(share.locator('video')).toHaveCount(0);
     await watch.click();
     await expectStreamImage(share);
+    await expect(share.locator('img')).toHaveCount(0);
     await b.page.getByRole('button', { name: 'Parar compartilhamento' }).first().click();
     await expect(a.page.locator('[data-tile-kind="screen"]')).toHaveCount(0);
   });

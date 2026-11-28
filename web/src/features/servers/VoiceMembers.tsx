@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { TOUCH_FIRST_QUERY } from '@/shared/hooks/useLongPress';
 import { useMediaQuery } from '@/shared/hooks/useMediaQuery';
 import { Avatar, colorFor } from '@/shared/Avatar';
-import { Button } from '@/shared/ui/primitives/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/shared/ui/primitives/dropdown-menu';
@@ -18,6 +17,7 @@ import { useIsSpeaking } from '@/features/calls/useLiveKitTrack';
 import { useMuteForMe } from '@/features/calls/useMuteForMe';
 import { participantMicMuted, useOwnMic } from '@/features/calls/micState';
 import { useStreamPreview } from '@/features/calls/streamPreviewStore';
+import { WatchButton } from '@/features/calls/WatchButton';
 import { useUserActivity } from '@/features/activity/activityDisplay';
 import { ActivityCard, ActivityIcon } from '@/features/activity/ActivityLine';
 import { canInChannel, canMoveInto, canMoveOutOf } from './serverUtils';
@@ -76,12 +76,8 @@ function StreamPreview({ participantId, name, onWatch }: { participantId: string
       {preview?.image
         ? <img src={preview.image} alt={t('voiceMembers.previewOf', { name })} className="absolute inset-0 h-full w-full object-contain" />
         : !answered && <span role="status" aria-label={t('voiceMembers.previewLoading')} className="absolute inset-0 animate-pulse bg-white/5" />}
-      {!preview?.image && answered && <span className="absolute inset-x-2 bottom-[calc(50%+1.75rem)] text-center">{t('voiceMembers.previewUnavailable')}</span>}
-      <Button type="button" size="lg" onClick={onWatch} aria-label={t('voiceMembers.watch.buttonLabel', { name })}
-        className="h-11 gap-2 rounded-full px-5 font-semibold shadow-sm">
-        <EyeIcon aria-hidden className="size-5" />
-        {t('voiceMembers.watch.button')}
-      </Button>
+      {!preview?.image && answered && <span className="absolute inset-x-2 bottom-[calc(50%+1.5rem)] text-center">{t('voiceMembers.previewUnavailable')}</span>}
+      <WatchButton onClick={onWatch} label={t('voiceMembers.watch.button')} aria-label={t('voiceMembers.watch.buttonLabel', { name })} />
     </div>
   );
 }

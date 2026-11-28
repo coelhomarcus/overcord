@@ -7,9 +7,10 @@ import { channelPermissionsIn, loadServerSnapshot } from '../servers/serverAcces
 import type { AppSocket, HandlerTable } from '../../types.js';
 
 // A still of someone's screen share, for whoever hovers its "ao vivo" badge
-// without being in the call. The server cannot see the stream (the media only
-// flows through LiveKit), so the streamer's own client draws a frame and
-// sends it. The frame lives here in memory for a few seconds, so a burst of
+// without being in the call, and behind "Assistir" on a share's tile until
+// someone in the call starts watching it. The server cannot see the stream
+// (the media only flows through LiveKit), so the streamer's own client draws a
+// frame and sends it. The frame lives here in memory for a few seconds, so a burst of
 // hovers costs the streamer one capture, and is never written anywhere.
 
 /** Long enough to absorb a burst of hovers, short enough to still be "now". */
@@ -108,7 +109,8 @@ async function handlePreviewRequest(socket: AppSocket, msg: { participantId?: st
     answer(null);
     return;
   }
-  if (!(await canSeeStream(viewer.userId, callId))) {
+  // someone in the same call already sees the share's tile, DM calls included
+  if (viewer.callConversationId !== callId && !(await canSeeStream(viewer.userId, callId))) {
     answer(null);
     return;
   }
