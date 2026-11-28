@@ -4,17 +4,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { after, afterEach, before, beforeEach, describe, it, mock } from 'node:test';
+import { after, afterEach, before, describe, it } from 'node:test';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { config } from '../../src/config/env.js';
 import { adminAuditLogs, users } from '../../src/db/schema.js';
 import { createApp } from '../../src/http/app.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { DUMP_FILE, MANIFEST_FILE, README_FILE } from '../../src/modules/backups/backupLayout.js';
 import { claimDownload, issueDownloadToken, releaseDownload, setBackupIdleTimeout } from '../../src/modules/backups/backupDownload.js';
 import { listZipEntries, readBackupZip } from '../../src/modules/backups/backupZipReader.js';
-import { adminHeaders, db, makeAdminSession, makeUser, pool } from './helpers.js';
+import { adminHeaders, authenticatorCode, db, giveAuthenticator, makeAdminSession, makeUser, pool } from './helpers.js';
 
 // The admin backup download end to end, on the real database and disk. pg_dump
 // is a stand-in script (PG_DUMP_BIN): the runner's client tools may be older than
@@ -36,24 +35,7 @@ after(async () => {
   fs.rmSync(uploadDir, { recursive: true, force: true });
   fs.rmSync(scratch, { recursive: true, force: true });
 });
-/** Every email the app hands to Resend in a test, read back for its code. */
-let mailbox: { to: string[]; text: string }[] = [];
-const savedEmail = { key: config.RESEND_API_KEY, from: config.RESEND_FROM_EMAIL };
-beforeEach(() => {
-  mailbox = [];
-  config.RESEND_API_KEY = 're_test';
-  config.RESEND_FROM_EMAIL = 'Overcord <noreply@example.test>';
-  mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
-    mailbox.push(JSON.parse(String(init.body)));
-    return new Response('{}', { status: 200 });
-  });
-});
-afterEach(() => {
-  process.env.PG_DUMP_BIN = fakePgDump;
-  mock.restoreAll();
-  config.RESEND_API_KEY = savedEmail.key;
-  config.RESEND_FROM_EMAIL = savedEmail.from;
-});
+afterEach(() => { process.env.PG_DUMP_BIN = fakePgDump; });
 
 const PASSWORD = 'correct horse battery';
 let passwordHash: Promise<string> | null = null;
@@ -63,24 +45,19 @@ async function admin(prefix = 'bkadmin') {
   const username = `${prefix}_${id.slice(0, 8)}`;
   passwordHash ??= hashPassword(PASSWORD);
   await db.insert(users).values({ id, username, passwordHash: await passwordHash, role: 'admin', email: `${username}@example.test`, twoFactorEmail: true });
+  await giveAuthenticator(id);
   return { id, username, token: await makeAdminSession(id) };
-}
-
-function lastCode(): string {
-  const match = mailbox.at(-1)?.text.match(/\b(\d{6})\b/);
-  assert.ok(match, 'an email with a 6-digit code should have been sent');
-  return match[1]!;
 }
 
 const request = (method: 'GET' | 'POST', url: string, token?: string, body?: unknown) => app.inject({
   method, url, headers: { ...adminHeaders(token), ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { payload: JSON.stringify(body) } : {}),
 });
 
-/** Both steps of issuing a link: the password earns a code by email, the code earns the link. */
-async function issue(a: { token: string }, reason: string) {
+/** Both steps of issuing a link: the password earns a challenge, a code from the admin's app earns the link. */
+async function issue(a: { id: string; token: string }, reason: string) {
   const sent = await request('POST', '/api/admin/backup/download/request', a.token, { reason, password: PASSWORD });
   assert.equal(sent.statusCode, 200, sent.body);
-  return request('POST', '/api/admin/backup/download', a.token, { reason, code: lastCode() });
+  return request('POST', '/api/admin/backup/download', a.token, { reason, code: await authenticatorCode(a.id) });
 }
 
 describe('admin backup download', () => {
@@ -134,6 +111,7 @@ describe('admin backup download', () => {
   it('needs a reason, an admin and the admin origin to issue a link', async () => {
     const a = await admin();
     const user = await makeUser('bkuser', 'user', true);
+    await giveAuthenticator(user.id); // refused for the role, not for a missing app
     assert.equal((await request('POST', '/api/admin/backup/download', a.token, {})).statusCode, 400);
     assert.equal((await request('POST', '/api/admin/backup/download', await makeAdminSession(user.id), { reason: 'curious' })).statusCode, 403);
     const foreign = await app.inject({
@@ -144,7 +122,7 @@ describe('admin backup download', () => {
     assert.equal((await request('GET', '/api/admin/backup/download/not-a-token', a.token)).statusCode, 404);
   });
 
-  it('issues a link only for the password and a code bound to the session and the reason', async () => {
+  it('issues a link only for the password and an app code bound to the session and the reason', async () => {
     const a = await admin();
     const reason = 'before the upgrade';
     const download = (token: string, body: Record<string, string>) => request('POST', '/api/admin/backup/download', token, { reason, ...body });
@@ -152,12 +130,11 @@ describe('admin backup download', () => {
 
     assert.deepEqual(refusal(await download(a.token, {})), [400, 'invalid_code'], 'a reason alone is not enough');
     assert.deepEqual(refusal(await request('POST', '/api/admin/backup/download/request', a.token, { reason, password: 'wrong' })), [403, 'invalid_password']);
-    assert.equal(mailbox.length, 0, 'no code for a wrong password');
 
     const sent = await request('POST', '/api/admin/backup/download/request', a.token, { reason, password: PASSWORD });
     assert.equal(sent.statusCode, 200);
-    assert.equal((sent.json() as { codeRequired: boolean }).codeRequired, true);
-    const code = lastCode();
+    assert.deepEqual(sent.json(), { codeRequired: true, method: 'authenticator' });
+    const code = await authenticatorCode(a.id);
     assert.deepEqual(refusal(await download(await makeAdminSession(a.id), { code })), [400, 'invalid_code'], 'another session of the same admin');
     assert.deepEqual(refusal(await request('POST', '/api/admin/backup/download', a.token, { reason: 'another reason', code })), [400, 'invalid_code']);
     const issued = await download(a.token, { code });
@@ -220,7 +197,7 @@ describe('admin backup download', () => {
         if (next !== 200) await new Promise((resolve) => setTimeout(resolve, 200));
       }
       assert.equal(next, 200, 'the lock was released once the script exited');
-      assert.equal((await request('POST', '/api/admin/backup/download', a.token, { reason: 'after the stall', code: lastCode() })).statusCode, 200);
+      assert.equal((await request('POST', '/api/admin/backup/download', a.token, { reason: 'after the stall', code: await authenticatorCode(a.id) })).statusCode, 200);
     } finally {
       setBackupIdleTimeout();
     }

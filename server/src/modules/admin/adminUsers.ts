@@ -42,14 +42,17 @@ interface PurgeCtx { actor: AuditActor | null; reason: string; requestId: string
  * suspending/deleting each other, or the last two admins racing, serialize
  * and each sees the other's effect. */
 async function lockAdminsAndTarget(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], targetId: string, actorId: string) {
-  const admins = (await tx.execute(sql`select id, status, two_factor_email from users where role = 'admin' order by id for update`)).rows as { id: string; status: string; two_factor_email: boolean }[];
+  const admins = (await tx.execute(sql`
+    select u.id, u.status, a.confirmed_at is not null as has_authenticator
+    from users u left join user_authenticators a on a.user_id = u.id
+    where u.role = 'admin' order by u.id for update of u`)).rows as { id: string; status: string; has_authenticator: boolean }[];
   const [target] = (await tx.execute(sql`
     select id, username, role, status, avatar, avatar_poster, banner, banner_poster, email, locale, deletion_due_at
     from users where id = ${targetId} for update`)).rows as unknown as LockedTarget[];
   // The actor was checked as an admin BEFORE this transaction; a concurrent
   // demotion or suspension may have landed since, so it is re-checked under the
   // lock. The CLI is not an account and is exempt.
-  const actorStillAdmin = actorId === CLI_ACTOR_ID || admins.some((a) => a.id === actorId && a.status === 'active' && a.two_factor_email);
+  const actorStillAdmin = actorId === CLI_ACTOR_ID || admins.some((a) => a.id === actorId && a.status === 'active' && a.has_authenticator);
   return { activeAdminCount: admins.filter((a) => a.status === 'active').length, target, actorStillAdmin };
 }
 

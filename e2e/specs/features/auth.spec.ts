@@ -1,5 +1,6 @@
 import { test, expect } from '../../fixtures/test';
 import { BASE_URL, emailCount, waitForEmailCode } from '../../stack/stack';
+import { appCode, rememberAuthenticator } from '../../fixtures/totp';
 
 test.describe('auth', () => {
   test('a new account lands in the app and keeps its session across a reload', async ({ users }) => {
@@ -75,6 +76,45 @@ test.describe('auth', () => {
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
     await expect(page.getByText(alice.username).first()).toBeVisible();
     await context.close();
+  });
+
+  test('authenticator app: set up in Settings with a QR key, then its code or a recovery code signs in', async ({ users, browser }) => {
+    const alice = await users.create('alice');
+    const page = await alice.page();
+    await page.goto('/settings/security');
+
+    await page.getByRole('button', { name: 'Configurar', exact: true }).click();
+    await page.getByLabel('Senha atual').fill(alice.password);
+    await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'QR code para o app autenticador' })).toBeVisible();
+    const key = await page.getByText(/^[A-Z2-7]{4}( [A-Z2-7]{4}){7}$/).textContent();
+    rememberAuthenticator(alice.username, key!);
+    await page.getByLabel('Código do app').pressSequentially(await appCode(alice.username));
+    const codes = page.getByRole('list', { name: 'Códigos de recuperação' });
+    await expect(codes.getByRole('listitem')).toHaveCount(10);
+    const recoveryCode = await codes.getByRole('listitem').first().textContent();
+    await page.getByRole('button', { name: 'Guardei os códigos', exact: true }).click();
+    await expect(page.getByText(/Restam 10 códigos de recuperação/)).toBeVisible();
+
+    for (const proof of ['app', 'recovery'] as const) {
+      const context = await browser.newContext({ baseURL: BASE_URL, locale: 'pt-BR' });
+      const other = await context.newPage();
+      await other.goto('/');
+      await other.getByLabel('Usuário').fill(alice.username);
+      await other.getByLabel('Senha', { exact: true }).fill(alice.password);
+      await other.getByRole('button', { name: 'Entrar', exact: true }).click();
+      await expect(other.getByText(/Abra seu app autenticador/)).toBeVisible();
+      if (proof === 'app') {
+        await other.getByLabel('Código de verificação').pressSequentially(await appCode(alice.username));
+      } else {
+        await other.getByRole('button', { name: 'Usar um código de recuperação', exact: true }).click();
+        await other.getByLabel('Código de recuperação').fill(recoveryCode!);
+        await other.getByRole('button', { name: 'Confirmar', exact: true }).click();
+      }
+      await expect(other.getByText(alice.username).first()).toBeVisible();
+      expect((await context.request.get('/api/auth/me')).status()).toBe(200);
+      await context.close();
+    }
   });
 
   test('two-step login: turned on in Settings with the emailed code, then asked for at the next login', async ({ users, browser }) => {

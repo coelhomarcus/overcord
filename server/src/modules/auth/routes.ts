@@ -112,8 +112,10 @@ function adminIdentity(id: string, user: Pick<User, 'username' | 'locale' | 'ava
   return { id, username: user.username, locale: resolveLocale(user.locale), avatar: user.avatar, avatarColor: user.avatarColor };
 }
 
-function adminTwoFactorRequired(reply: FastifyReply): void {
-  sendError(reply, 403, 'admin_two_factor_required', 'Ative a verificação em duas etapas em Configurações → Segurança no Overcord.');
+// The panel takes an authenticator app as its second factor, never the email: with the inbox alone, someone could
+// reset the password and receive the login code.
+function adminAuthenticatorRequired(reply: FastifyReply): void {
+  sendError(reply, 403, 'admin_authenticator_required', 'Ative o app autenticador em Configurações → Segurança no Overcord.');
 }
 
 async function handleRegister(request: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -247,7 +249,8 @@ async function handleLogin(request: FastifyRequest, reply: FastifyReply, scope: 
   }
   if (isPastDeletion(user)) return accountDeletedError(reply);
   if (scope === 'admin' && user.role !== 'admin') return sendError(reply, 403, 'forbidden', 'Apenas administradores.');
-  if (scope === 'admin' && !user.twoFactorEmail) return adminTwoFactorRequired(reply);
+  const factor = await secondFactorOf(user);
+  if (scope === 'admin' && factor !== 'authenticator') return adminAuthenticatorRequired(reply);
 
   if (needsRehash(user.passwordHash)) {
     hashPassword(password)
@@ -255,7 +258,6 @@ async function handleLogin(request: FastifyRequest, reply: FastifyReply, scope: 
       .catch(() => {});
   }
 
-  const factor = await secondFactorOf(user);
   if (factor) return startLoginChallenge(reply, user, scope, factor);
   return finishLogin(request, reply, user, scope);
 }
@@ -350,6 +352,10 @@ async function loginChallengeFor(request: FastifyRequest, reply: FastifyReply, c
   }
   if (scope === 'admin' && user.role !== 'admin') {
     sendError(reply, 403, 'forbidden', 'Apenas administradores.');
+    return { refused: true };
+  }
+  if (scope === 'admin' && factor !== 'authenticator') {
+    adminAuthenticatorRequired(reply);
     return { refused: true };
   }
   return { user, challengeHash, factor };

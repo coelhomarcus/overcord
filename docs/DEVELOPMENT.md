@@ -104,7 +104,7 @@ It is a development setting. The server refuses to start when it is set with `NO
 
 ## Create an administrator
 
-Configure an [email provider](INTEGRATIONS.md#resend) or the local mail sink and turn on two-step verification in the account's **Settings → Security** before provisioning. See [administrator provisioning](DEPLOY.md#administration-site).
+Set `TOTP_ENCRYPTION_KEY` in `.env` (`openssl rand -base64 32`) and set up an authenticator app in the account's **Settings → Security** before provisioning: the panel only signs in with one. See [administrator provisioning](DEPLOY.md#administration-site).
 
 ```bash
 bun run admin:grant <your-username>
@@ -191,6 +191,7 @@ Every script runs from the repository root.
 | `bun run backup` / `restore` | Backup and restore, see [DEPLOY.md](DEPLOY.md#backups). |
 | `bun run backup:rehearse` | Backup, restore and a boot on throwaway local databases ([below](#backup-scripts-locally)). |
 | `bun run admin:grant -- <username>` / `admin:revoke` | Gives or takes administrator access. |
+| `bun run auth:remove-authenticator -- <username>` | Removes an account's authenticator app and recovery codes, for someone who lost both. Ends its panel sessions and leaves a `cli` audit entry. |
 | `bun run emoji:data` | Rebuilds `web/public/emoji-data/<lang>/emojis.json` from the pinned `emojibase-data`, leaving out what the pinned `@discordapp/twemoji` cannot draw. Run it after bumping either. |
 | `bun run icons` | Rebuilds the web app's Fluent icons from `@fluentui/svg-icons`. Add new icons to `FLUENT_ICONS` in `web/scripts/buildIcons.ts`. |
 | `bun run --cwd admin icons` | Rebuilds the administration site's Fluent icons. Add new icons to `FLUENT_ICONS` in `admin/scripts/buildIcons.ts`. Each frontend tests that its generated file is current. |

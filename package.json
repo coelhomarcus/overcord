@@ -32,6 +32,7 @@
     "typecheck:server:tests": "bun --bun tsc -p server/tsconfig.tests.json",
     "admin:grant": "bun --preload ./server/src/config/loadLocalEnv.ts server/src/scripts/adminRole.ts grant",
     "admin:revoke": "bun --preload ./server/src/config/loadLocalEnv.ts server/src/scripts/adminRole.ts revoke",
+    "auth:remove-authenticator": "bun --preload ./server/src/config/loadLocalEnv.ts server/src/scripts/removeAuthenticator.ts",
     "db:preflight": "bun --preload ./server/src/config/loadLocalEnv.ts server/src/scripts/legacyPreflight.ts",
     "db:repair": "bun --preload ./server/src/config/loadLocalEnv.ts server/src/scripts/legacyRepair.ts",
     "backup": "bun --preload ./server/src/config/loadLocalEnv.ts server/src/scripts/backup.ts",

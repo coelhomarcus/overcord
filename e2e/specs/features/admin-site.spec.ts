@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import type { Page } from '@playwright/test';
-import { emailOf, enableTwoFactor } from '../../fixtures/admin';
+import { enableAuthenticator } from '../../fixtures/admin';
+import { appCode } from '../../fixtures/totp';
 import { befriend, createServer } from '../../fixtures/api';
 import { threeFrameGif } from '../../fixtures/images';
 import { expect, test, type User } from '../../fixtures/test';
-import { ADMIN_URL, BASE_URL, emailCount, grantAdmin, waitForEmailCode } from '../../stack/stack';
+import { ADMIN_URL, BASE_URL, grantAdmin } from '../../stack/stack';
 
 async function signIn(page: Page, user: User) {
   await page.getByLabel('Nome de usuário', { exact: true }).fill(user.username);
@@ -12,11 +13,10 @@ async function signIn(page: Page, user: User) {
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
 }
 
+/** The password, then the code from the admin's authenticator app: the only second factor the panel takes. */
 async function signInWithCode(page: Page, user: User) {
-  const email = emailOf(user);
-  const seen = await emailCount(email);
   await signIn(page, user);
-  await page.getByLabel('Código de verificação', { exact: true }).pressSequentially(await waitForEmailCode(email, seen));
+  await page.getByLabel('Código de verificação', { exact: true }).pressSequentially(await appCode(user.username));
 }
 
 test('administration uses its own origin and session', async ({ users, request }) => {
@@ -47,9 +47,9 @@ test('administration uses its own origin and session', async ({ users, request }
   }
   await page.goto(`${ADMIN_URL}/admin/users/${member.id}?tab=moderation`);
   await signIn(page, signedIn);
-  await expect(page.getByRole('alert')).toContainText('Ative a verificação em duas etapas');
+  await expect(page.getByRole('alert')).toContainText('Ative o app autenticador');
   expect((await page.request.get(`${ADMIN_URL}/api/admin/auth/me`)).status()).toBe(401);
-  await enableTwoFactor(signedIn);
+  await enableAuthenticator(signedIn);
   const verified = page.waitForResponse(`${ADMIN_URL}/api/admin/auth/login/verify`);
   await signInWithCode(page, signedIn);
   const headers = await (await verified).headersArray();
@@ -94,7 +94,7 @@ test('administration uses its own origin and session', async ({ users, request }
 test('the administration dashboard works on desktop and mobile', async ({ users }) => {
   const admin = await users.create('admin');
   const member = await users.create('member');
-  await enableTwoFactor(admin);
+  await enableAuthenticator(admin);
   grantAdmin(admin.username);
 
   const page = await admin.context.newPage();
@@ -149,7 +149,7 @@ test('the admin account shows its profile photo after sign-in and reload', async
     const { user } = await response.json() as { user: { avatar: string } };
     return user.avatar;
   }).toBe(avatar);
-  await enableTwoFactor(admin);
+  await enableAuthenticator(admin);
   grantAdmin(admin.username);
 
   const page = await admin.context.newPage();
@@ -171,32 +171,30 @@ test('the admin account shows its profile photo after sign-in and reload', async
 test('a login code is bound to the site that requested it', async ({ users }) => {
   const admin = await users.create('admin');
   grantAdmin(admin.username);
-  await enableTwoFactor(admin);
-  const email = emailOf(admin);
+  await enableAuthenticator(admin);
 
   const page = await admin.context.newPage();
   await page.goto(`${ADMIN_URL}/admin/users`);
-  const seen = await emailCount(email);
   const login = page.waitForResponse(`${ADMIN_URL}/api/admin/auth/login`);
   await signIn(page, admin);
   const { twoFactor } = await (await login).json() as { twoFactor: { challenge: string } };
-  const code = await waitForEmailCode(email, seen);
+  // the app's code does not open a login of the main app with the panel's challenge
+  const code = await appCode(admin.username);
   const wrongSite = await admin.api.post('/api/auth/login/verify', { data: { challenge: twoFactor.challenge, code } });
   expect(wrongSite.status()).toBe(400);
   await page.getByLabel('Código de verificação', { exact: true }).pressSequentially(code);
   await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeVisible();
 });
 
-test('granting and revoking administrator access each require the password and a fresh email code', async ({ users }) => {
+test('granting and revoking administrator access each require the password and a fresh app code', async ({ users }) => {
   const admin = await users.create('admin');
   const member = await users.create('member');
-  await enableTwoFactor(admin);
+  await enableAuthenticator(admin);
   grantAdmin(admin.username);
 
   const page = await admin.context.newPage();
   await page.goto(`${ADMIN_URL}/admin/users/${member.id}?tab=moderation`);
   await signInWithCode(page, admin);
-  const email = emailOf(admin);
   const reason = 'Alteração de função no teste';
   const post = (action: 'grant' | 'revoke', code?: string) => page.request.post(`${ADMIN_URL}/api/admin/users/${member.id}/${action}-admin`, {
     headers: { origin: ADMIN_URL }, data: { reason, code },
@@ -211,10 +209,10 @@ test('granting and revoking administrator access each require the password and a
   await grant.getByLabel('Senha atual', { exact: true }).fill('senha incorreta');
   await grant.getByRole('button', { name: 'Enviar código', exact: true }).click();
   await expect(grant.getByRole('alert')).toHaveText('Senha incorreta.');
-  const grantSeen = await emailCount(email);
   await grant.getByLabel('Senha atual', { exact: true }).fill(admin.password);
   await grant.getByRole('button', { name: 'Enviar código', exact: true }).click();
-  const grantCode = await waitForEmailCode(email, grantSeen);
+  await expect(grant.getByText(/app autenticador mostra agora/)).toBeVisible();
+  const grantCode = await appCode(admin.username);
   expect((await post('revoke', grantCode)).status()).toBe(400);
   await grant.getByRole('textbox', { name: /Código de verificação/ }).fill(grantCode);
   await grant.getByRole('button', { name: 'Conceder admin', exact: true }).click();
@@ -230,9 +228,8 @@ test('granting and revoking administrator access each require the password and a
   await revoke.getByRole('textbox', { name: 'Motivo (fica registrado na auditoria)', exact: true }).fill(reason);
   await revoke.getByRole('textbox', { name: /Para confirmar, digite/ }).fill(member.username);
   await revoke.getByLabel('Senha atual', { exact: true }).fill(admin.password);
-  const revokeSeen = await emailCount(email);
   await revoke.getByRole('button', { name: 'Enviar código', exact: true }).click();
-  await revoke.getByRole('textbox', { name: /Código de verificação/ }).fill(await waitForEmailCode(email, revokeSeen));
+  await revoke.getByRole('textbox', { name: /Código de verificação/ }).fill(await appCode(admin.username));
   await revoke.getByRole('button', { name: 'Remover admin', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Conceder admin', exact: true })).toBeVisible();
 });
@@ -240,7 +237,7 @@ test('granting and revoking administrator access each require the password and a
 test('an admin downloads a full backup of the instance as one ZIP', async ({ users }) => {
   const admin = await users.create('admin');
   const owner = await users.create('owner');
-  await enableTwoFactor(admin);
+  await enableAuthenticator(admin);
   grantAdmin(admin.username);
   // a stored file the backup must carry
   const server = await createServer(owner.api, 'E2E backup');
@@ -257,10 +254,8 @@ test('an admin downloads a full backup of the instance as one ZIP', async ({ use
   const dialog = page.getByRole('dialog', { name: 'Baixar backup completo' });
   await dialog.getByRole('textbox', { name: 'Motivo (fica registrado na auditoria)', exact: true }).fill('Cópia antes da atualização');
   await dialog.getByLabel('Senha atual', { exact: true }).fill(admin.password);
-  const email = emailOf(admin);
-  const seen = await emailCount(email);
   await dialog.getByRole('button', { name: 'Enviar código', exact: true }).click();
-  await dialog.getByRole('textbox', { name: /Código de verificação/ }).fill(await waitForEmailCode(email, seen));
+  await dialog.getByRole('textbox', { name: /Código de verificação/ }).fill(await appCode(admin.username));
   const downloading = page.waitForEvent('download');
   await dialog.getByRole('button', { name: 'Baixar', exact: true }).click();
   const download = await downloading;
@@ -285,7 +280,7 @@ test('an administrator profile shows granted badges without the role', async ({ 
   const admin = await users.create('admin');
   const friend = await users.create('friend');
   await befriend(admin, friend);
-  await enableTwoFactor(admin);
+  await enableAuthenticator(admin);
   grantAdmin(admin.username);
 
   const page = await admin.context.newPage();

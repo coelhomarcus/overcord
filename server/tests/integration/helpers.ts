@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { db, pool } from '../../src/db/client.js';
-import { conversations, friendships, serverMembers, servers, users } from '../../src/db/schema.js';
+import { conversations, friendships, serverMembers, servers, userAuthenticators, users } from '../../src/db/schema.js';
 import { join, participants } from '../../src/modules/presence/participants.js';
 import { createServer } from '../../src/modules/servers/serversRepository.js';
 import { invalidateAllServers } from '../../src/modules/servers/serverAccess.js';
@@ -10,6 +10,8 @@ import type { AppSocket, Participant } from '../../src/types.js';
 import { config } from '../../src/config/env.js';
 import { adminCookieName } from '../../src/modules/admin/adminOrigin.js';
 import { createSession } from '../../src/modules/auth/session.js';
+import { openSecret, sealSecret } from '../../src/modules/auth/secretBox.js';
+import { totpCode, totpStep } from '../../src/modules/auth/totp.js';
 
 // Shared setup for the real-Postgres suite. Every test makes its own users and
 // servers (unique names), so files never depend on each other or on order.
@@ -29,6 +31,7 @@ export function adminHeaders(token?: string) {
   };
 }
 
+/** An admin also gets an authenticator app, the only second factor the panel takes (`authenticatorCode`). */
 export async function makeUser(prefix: string, role: 'user' | 'admin' = 'user', twoFactorEmail = role === 'admin'): Promise<{ id: string; username: string }> {
   const id = crypto.randomUUID();
   const username = `${prefix}_${id.slice(0, 8)}`;
@@ -36,7 +39,24 @@ export async function makeUser(prefix: string, role: 'user' | 'admin' = 'user', 
     id, username, passwordHash: 'x', role,
     ...(twoFactorEmail ? { email: `${username}@example.test`, twoFactorEmail } : {}),
   });
+  if (role === 'admin') await giveAuthenticator(id);
   return { id, username };
+}
+
+/** A confirmed authenticator app for the account, as if it had set one up. */
+export async function giveAuthenticator(userId: string): Promise<void> {
+  assert.ok(config.TOTP_ENCRYPTION_KEY, 'Integration runner must configure TOTP_ENCRYPTION_KEY');
+  await db.insert(userAuthenticators).values({
+    userId, secretCiphertext: sealSecret(config.TOTP_ENCRYPTION_KEY, crypto.randomBytes(20), userId), confirmedAt: new Date(),
+  });
+}
+
+/** The code the account's app shows now. A code works once, so this forgets the step last used: tests that
+ * confirm several actions within 30 seconds would otherwise run out (authenticators.itest.ts covers the replay). */
+export async function authenticatorCode(userId: string): Promise<string> {
+  const [row] = await db.update(userAuthenticators).set({ lastUsedStep: 0 }).where(eq(userAuthenticators.userId, userId)).returning();
+  assert.ok(row && config.TOTP_ENCRYPTION_KEY, 'the account has no authenticator app');
+  return totpCode(openSecret(config.TOTP_ENCRYPTION_KEY, row.secretCiphertext, userId), totpStep(Date.now()));
 }
 
 export async function befriend(a: string, b: string): Promise<void> {

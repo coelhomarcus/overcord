@@ -11,7 +11,7 @@ import { createSession, resolveSession, sweepExpiredSessions, touchSessions } fr
 import { FAILURE_RULE } from '../../src/modules/auth/ratelimit.js';
 import { KNOWN_LOGIN_DAYS, KNOWN_LOGIN_SECONDS, recordLogin, sweepKnownLogins, whenLoginAlertsSettled } from '../../src/modules/auth/loginAlert.js';
 import { participants } from '../../src/modules/presence/participants.js';
-import { adminHeaders, db, joinNew, makeAdminSession, pool } from './helpers.js';
+import { adminHeaders, authenticatorCode, db, giveAuthenticator, joinNew, makeAdminSession, pool } from './helpers.js';
 
 // The account's own security controls against the real database: two-step login by email, the session
 // list and its revocations (sockets included), idle expiry and the password change.
@@ -102,36 +102,37 @@ function deviceSetCookie(reply: Reply): string {
 }
 
 describe('administrator authentication', () => {
-  it('requires two-step login and retires legacy sessions even for enrolled accounts', async () => {
-    const user = await makeAccount();
+  it('requires an authenticator app, never the email, and retires sessions issued before it', async () => {
+    const user = await makeAccount({ twoFactor: true });
     await db.update(users).set({ role: 'admin' }).where(eq(users.id, user.id));
     const first = await app.inject({
       method: 'POST', url: '/api/admin/auth/login', headers: adminHeaders(), payload: { username: user.username, password: PASSWORD },
     });
     assert.equal(first.statusCode, 403);
-    assert.equal(first.json().error.code, 'admin_two_factor_required');
+    assert.equal(first.json().error.code, 'admin_authenticator_required', 'two-step login by email is not enough');
     assert.equal(first.headers['set-cookie'], undefined);
-    assert.equal((await login(user.username)).status, 200);
+    assert.equal((await login(user.username)).status, 200, 'the main app still signs in');
 
-    const oldToken = crypto.randomBytes(32).toString('base64url');
-    await db.insert(sessions).values({
-      id: uid(), userId: user.id, tokenHash: `admin:${tokenHashOf(oldToken)}`, expiresAt: new Date(Date.now() + 60_000),
-    });
-    await db.update(users).set({ twoFactorEmail: true }).where(eq(users.id, user.id));
+    // a panel session from before the app was required (prefix admin:2fa:) and one from before two-step login
+    const legacy = [crypto.randomBytes(32).toString('base64url'), crypto.randomBytes(32).toString('base64url')];
+    await db.insert(sessions).values([
+      { id: uid(), userId: user.id, tokenHash: `admin:2fa:${tokenHashOf(legacy[0]!)}`, expiresAt: new Date(Date.now() + 60_000) },
+      { id: uid(), userId: user.id, tokenHash: `admin:${tokenHashOf(legacy[1]!)}`, expiresAt: new Date(Date.now() + 60_000) },
+    ]);
+    await giveAuthenticator(user.id);
     const adminMe = (token: string) => app.inject({ method: 'GET', url: '/api/admin/auth/me', headers: adminHeaders(token) });
-    assert.equal((await adminMe(oldToken)).statusCode, 401);
+    for (const token of legacy) assert.equal((await adminMe(token)).statusCode, 401);
     const adminToken = await makeAdminSession(user.id);
     assert.equal((await adminMe(adminToken)).statusCode, 200);
 
     const { cookie } = await cookieFor(user.id);
-    assert.equal((await call('POST', '/api/auth/two-factor/disable', { cookie, payload: { password: PASSWORD } })).status, 200);
-    assert.equal((await call('POST', '/api/auth/two-factor/disable/confirm', { cookie, payload: { code: lastCode() } })).status, 200);
-    assert.equal((await adminMe(adminToken)).statusCode, 401);
+    assert.deepEqual((await call('POST', '/api/auth/authenticator/disable', { cookie, payload: { password: PASSWORD } })).body, { codeRequired: true, method: 'authenticator' });
+    assert.equal((await call('POST', '/api/auth/authenticator/disable/confirm', { cookie, payload: { code: await authenticatorCode(user.id) } })).status, 200);
+    assert.equal((await adminMe(adminToken)).statusCode, 401, 'turning the app off ends the panel sessions');
     assert.equal((await me(cookie)).status, 200);
 
-    assert.equal((await call('POST', '/api/auth/two-factor/enable/request', { cookie, payload: { password: PASSWORD } })).status, 200);
-    assert.equal((await call('POST', '/api/auth/two-factor/enable/confirm', { cookie, payload: { code: lastCode() } })).status, 200);
-    assert.equal((await adminMe(adminToken)).statusCode, 401, 'reenrollment does not restore the prior session');
+    await giveAuthenticator(user.id);
+    assert.equal((await adminMe(adminToken)).statusCode, 401, 'a new app does not restore the prior session');
   });
 
   it('checks an admin’s current address before issuing an email change code, including before enrollment', async () => {
@@ -157,14 +158,15 @@ describe('administrator authentication', () => {
   it('binds a role change code to the administrator session and still prevents self-demotion', async () => {
     const user = await makeAccount({ twoFactor: true });
     await db.update(users).set({ role: 'admin' }).where(eq(users.id, user.id));
+    await giveAuthenticator(user.id);
     const [token, otherToken] = await Promise.all([makeAdminSession(user.id), makeAdminSession(user.id)]);
     const path = `/api/admin/users/${user.id}/revoke-admin`;
     const reason = 'Remove my own access';
     const post = (url: string, token: string, credentials: Record<string, string>) => app.inject({
       method: 'POST', url, headers: adminHeaders(token), payload: { reason, ...credentials },
     });
-    assert.equal((await post(`${path}/request`, token, { password: PASSWORD })).statusCode, 200);
-    const code = lastCode();
+    assert.deepEqual((await post(`${path}/request`, token, { password: PASSWORD })).json(), { codeRequired: true, method: 'authenticator' });
+    const code = await authenticatorCode(user.id);
     assert.equal((await post(path, otherToken, { code })).json().error.code, 'invalid_code');
     assert.equal((await post(path, token, { code })).json().error.code, 'self_action');
     assert.equal((await post(path, token, { code })).json().error.code, 'invalid_code');
@@ -175,6 +177,7 @@ describe('administrator authentication', () => {
     const target = await makeAccount({ twoFactor: true });
     const member = await makeAccount();
     await db.update(users).set({ role: 'admin' }).where(inArray(users.id, [actor.id, target.id]));
+    await giveAuthenticator(actor.id);
     const token = await makeAdminSession(actor.id);
     const reason = 'Compromised administrator';
     const send = (method: 'POST' | 'DELETE', url: string, body: Record<string, string>) => app.inject({
@@ -188,14 +191,14 @@ describe('administrator authentication', () => {
     assert.equal((await send('POST', `/api/admin/users/${member.id}/suspend`, {})).statusCode, 200, 'a regular account needs no code');
 
     assert.equal((await send('POST', `${suspend}/request`, { password: PASSWORD })).statusCode, 200);
-    const code = lastCode();
+    const code = await authenticatorCode(actor.id);
     assert.deepEqual(errorOf(await send('DELETE', `/api/admin/users/${target.id}`, { confirm: target.username, code })), [400, 'invalid_code'], 'a code is for one action');
     assert.equal((await send('POST', suspend, { code })).statusCode, 200);
     assert.equal((await db.select({ status: users.status }).from(users).where(eq(users.id, target.id)))[0]?.status, 'suspended');
 
     assert.equal((await send('POST', `/api/admin/users/${target.id}/reactivate`, {})).statusCode, 200, 'reactivating asks no code');
     assert.equal((await send('POST', `/api/admin/users/${target.id}/delete/request`, { password: PASSWORD })).statusCode, 200);
-    assert.equal((await send('DELETE', `/api/admin/users/${target.id}`, { confirm: target.username, code: lastCode() })).statusCode, 200);
+    assert.equal((await send('DELETE', `/api/admin/users/${target.id}`, { confirm: target.username, code: await authenticatorCode(actor.id) })).statusCode, 200);
     assert.equal((await db.select({ id: users.id }).from(users).where(eq(users.id, target.id))).length, 0);
   });
 });
@@ -875,6 +878,7 @@ describe('an account whose counters someone else filled', () => {
   it('keeps the app and admin device credentials separate', async () => {
     const { user, home, device } = await ownedAccount();
     await db.update(users).set({ role: 'admin', twoFactorEmail: true }).where(eq(users.id, user.id));
+    await giveAuthenticator(user.id);
     const payload = { username: user.username, password: PASSWORD };
     const adminLogin = (cookie?: string) => app.inject({
       method: 'POST', url: '/api/admin/auth/login', payload, remoteAddress: home.ip,
@@ -885,7 +889,7 @@ describe('an account whose counters someone else filled', () => {
     assert.equal(first.headers['set-cookie'], undefined);
     const enrolled = await app.inject({
       method: 'POST', url: '/api/admin/auth/login/verify', headers: adminHeaders(),
-      payload: { challenge: first.json().twoFactor.challenge, code: lastCode() },
+      payload: { challenge: first.json().twoFactor.challenge, code: await authenticatorCode(user.id) },
     });
     assert.equal(enrolled.statusCode, 200);
     const adminDevice = enrolled.cookies.find((cookie) => cookie.name === '__Host-overcord-admin-device');

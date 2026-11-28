@@ -4,7 +4,8 @@ import { sendJson, sendError, jsonBody } from '../../http/respond.js';
 import type { ErrorCode } from '../../http/errors.js';
 import * as floodControl from '../../realtime/floodControl.js';
 import { requireAdmin, requireAdminSession } from './adminAuth.js';
-import { confirmPassword, secondFactorOf, sendSecondFactorChallenge, verifySecondFactor, type CurrentEmailPurpose } from '../auth/accountConfirmation.js';
+import { confirmPassword, sendSecondFactorChallenge, verifySecondFactor, type CurrentEmailPurpose } from '../auth/accountConfirmation.js';
+import { hasAuthenticator } from '../auth/authenticators.js';
 import { findById } from '../users/users.js';
 import { normalizeReason } from './adminPolicy.js';
 import { listAudit } from './auditLog.js';
@@ -88,9 +89,8 @@ async function mutating(request: FastifyRequest, reply: FastifyReply) {
 type Mutating = NonNullable<Awaited<ReturnType<typeof mutating>>>;
 type StepUpPurpose = Extract<CurrentEmailPurpose, 'admin_role_change' | 'admin_backup' | 'admin_account_action'>;
 
-// What a stolen panel session must not be able to do on its own: the acting admin's current password, then their
-// second factor (a code from their authenticator app, else one sent to their address), bound to this session, the
-// action, its target and the written reason.
+// What a stolen panel session must not be able to do on its own: the acting admin's current password, then a code
+// from their authenticator app (or a recovery code), bound to this session, the action, its target and the reason.
 const stepUpScope = (m: Mutating, action: string, targetId: string) =>
   crypto.createHash('sha256').update(JSON.stringify([m.session.tokenHash, action, targetId, m.reason])).digest('hex');
 
@@ -98,7 +98,7 @@ const stepUpScope = (m: Mutating, action: string, targetId: string) =>
 async function sendStepUpCode(reply: FastifyReply, m: Mutating, purpose: StepUpPurpose, scope: string): Promise<void> {
   if (!await confirmPassword(reply, m.session, String(m.body.password ?? ''))) return;
   const user = await findById(m.actor.id);
-  if (user?.role !== 'admin' || user.status !== 'active' || !(await secondFactorOf(user))) {
+  if (user?.role !== 'admin' || user.status !== 'active' || !(await hasAuthenticator(user.id))) {
     return sendError(reply, 403, 'forbidden', 'Você não tem mais permissão de administrador.');
   }
   return sendSecondFactorChallenge(reply, user, purpose, scope);

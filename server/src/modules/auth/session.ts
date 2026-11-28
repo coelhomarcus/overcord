@@ -5,6 +5,7 @@ import { sessions, users } from '../../db/schema.js';
 import { config } from '../../config/env.js';
 import type { SessionUser } from '../../types.js';
 import { resolveLocale } from '../users/locale.js';
+import { hasAuthenticator } from './authenticators.js';
 
 // Login sessions. The cookie carries a raw 32-byte token; only its sha256
 // (`tokenHash`) is stored — a DB leak alone can't be replayed as a session.
@@ -41,8 +42,8 @@ const cache = new Map<string, CacheEntry>(); // tokenHash -> { value, expiresAtM
 
 function hashToken(rawToken: string, scope: SessionScope): string {
   const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  // Sessions issued before two-step login became mandatory may only prove the password.
-  return scope === 'admin' ? `admin:2fa:${hash}` : hash;
+  // Panel sessions issued before an authenticator app became mandatory may only prove the password and the email.
+  return scope === 'admin' ? `admin:totp:${hash}` : hash;
 }
 
 function cacheGet(tokenHash: string): SessionUser | undefined {
@@ -108,7 +109,6 @@ export async function resolveSession(rawToken: string | undefined | null, scope:
       role: users.role,
       locale: users.locale,
       status: users.status,
-      twoFactorEmail: users.twoFactorEmail,
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
@@ -120,7 +120,7 @@ export async function resolveSession(rawToken: string | undefined | null, scope:
     cacheInvalidate(tokenHash);
     return null;
   }
-  if (scope === 'admin' && (!row.twoFactorEmail || !row.email)) return null;
+  if (scope === 'admin' && !(await hasAuthenticator(row.userId))) return null;
   if (!isSessionLive(row)) {
     cacheInvalidate(tokenHash);
     // an idle one would otherwise wait for the sweep; deleting it now keeps the session list honest

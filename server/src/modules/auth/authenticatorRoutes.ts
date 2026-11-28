@@ -16,7 +16,7 @@ import {
   authenticatorsAvailable, confirmAuthenticatorSetup, hasAuthenticator, removeAuthenticator, replaceRecoveryCodes, startAuthenticatorSetup,
 } from './authenticators.js';
 import * as ratelimit from './ratelimit.js';
-import { resolveSession } from './session.js';
+import { destroyAdminSessionsForUser, resolveSession } from './session.js';
 
 const log = logger.child({ component: 'auth' });
 
@@ -106,7 +106,11 @@ async function handleDisableConfirm(request: FastifyRequest, reply: FastifyReply
   if (!sess) return;
   const via = await verifyAuthenticatorChallenge(request, reply, sess.userId, 'authenticator_disable', sessionScope(sess));
   if (!via) return;
-  await db.transaction((tx) => removeAuthenticator(sess.userId, tx));
+  // without the app the panel no longer accepts the account, so its open panel sessions end with it
+  await db.transaction(async (tx) => {
+    await removeAuthenticator(sess.userId, tx);
+    await destroyAdminSessionsForUser(sess.userId, tx);
+  });
   await recordAudit({
     actor: actorOf(sess), action: 'account.authenticator_disable', targetType: 'user', targetId: sess.userId, targetLabel: sess.username,
     detail: { via }, requestId: request.id,
