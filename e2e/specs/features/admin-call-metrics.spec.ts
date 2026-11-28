@@ -1,4 +1,4 @@
-import { ADMIN_CALL_METRICS_URL, enableTwoFactor, readAdminCallMetrics, signInAdminThroughApi } from '../../fixtures/admin';
+import { ADMIN_CALL_METRICS_URL, enableAuthenticator, readAdminCallMetrics, signInAdminThroughApi } from '../../fixtures/admin';
 import { acceptInvite, createInvite, createServer } from '../../fixtures/api';
 import { installScreenCapture } from '../../fixtures/screenShare';
 import { expect, test } from '../../fixtures/test';
@@ -8,7 +8,7 @@ test('the admin sees aggregate calls and screen peaks through a pause and resume
   const alice = await users.create('alice');
   const bob = await users.create('bob');
   grantAdmin(alice.username);
-  await enableTwoFactor(alice);
+  await enableAuthenticator(alice);
   await signInAdminThroughApi(alice);
   expect((await bob.api.get(ADMIN_CALL_METRICS_URL)).status()).toBe(401);
 

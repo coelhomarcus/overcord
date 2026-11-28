@@ -91,6 +91,18 @@ describe('DeleteAccountSettings', () => {
     await waitFor(() => expect(leaveAfterDeletion).toHaveBeenCalledWith(DUE));
   });
 
+  it('asks for the authenticator app code when the account has one, naming no email', async () => {
+    const user = userEvent.setup();
+    requestAccountDeletion.mockResolvedValue({ codeRequired: true, method: 'authenticator' });
+    confirmAccountDeletion.mockResolvedValue({ deletionDueAt: DUE });
+    render(<DeleteAccountSettings />);
+    await openAndTypePassword(user);
+    expect(await screen.findByText('Digite o código de 6 dígitos que o seu app autenticador mostra agora.')).toBeInTheDocument();
+    expect(screen.queryByText(/Enviamos um código/)).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Código de verificação'), '654321');
+    await waitFor(() => expect(confirmAccountDeletion).toHaveBeenCalledWith('654321'));
+  });
+
   it('explains why the last admin cannot leave', async () => {
     const user = userEvent.setup();
     requestAccountDeletion.mockRejectedValue(new ApiError(409, 'last_admin', 'x'));

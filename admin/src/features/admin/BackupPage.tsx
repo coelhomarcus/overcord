@@ -4,7 +4,7 @@ import { Button } from '@/shared/ui/primitives/button';
 import { formatFileSize } from '@/shared/lib/formatBytes';
 import { useLanguage } from '@/i18n/useLanguage';
 import { AdminNotice } from './AdminNotice';
-import { fetchBackupInfo, requestBackupDownload, type AuditRow } from './adminApi';
+import { fetchBackupInfo, requestBackupCode, requestBackupDownload, type AuditRow } from './adminApi';
 import { AdminActionRow, AdminFieldRow, AdminFields, AdminPageTitle, AdminSection } from './AdminSection';
 import { AdminSectionsSkeleton } from './AdminSkeletons';
 import { formatWhen } from './adminFormat';
@@ -49,7 +49,7 @@ function RecentDownload({ row }: { row: AuditRow }) {
 
 /** A full backup of the instance, downloaded in the browser. The ZIP is built while it downloads and never
  * stored (server: modules/backups); this page shows what it will hold and asks for the reason the audit
- * log records. */
+ * log records, then the admin's password and an emailed code. */
 export function BackupPage() {
   const { t } = useTranslation('admin');
   const language = useLanguage();
@@ -119,11 +119,14 @@ export function BackupPage() {
         title={t('backup.dialogTitle')}
         description={t('backup.dialogDescription')}
         confirmLabel={t('backup.dialogConfirm')}
-        onSubmit={async (reason) => {
-          const { url } = await requestBackupDownload(reason);
-          startBrowserDownload(url);
-          setStarted(true);
-          setTimeout(() => { void refresh(); }, REFRESH_AFTER_START_MS);
+        verification={{
+          requestCode: requestBackupCode,
+          onConfirm: async (reason, code) => {
+            const { url } = await requestBackupDownload(reason, code);
+            startBrowserDownload(url);
+            setStarted(true);
+            setTimeout(() => { void refresh(); }, REFRESH_AFTER_START_MS);
+          },
         }}
       />
     </div>

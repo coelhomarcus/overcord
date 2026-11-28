@@ -624,6 +624,13 @@
       "when": 1795841020083,
       "tag": "0088_admin_call_peaks",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1795887134377,
+      "tag": "0089_authenticators",
+      "breakpoints": true
     }
   ]
 }

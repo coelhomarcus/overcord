@@ -194,6 +194,7 @@
     "searchNameOrServer": "Buscar por nome, servidor ou ID"
   },
   "dialog": {
+    "authenticatorPrompt": "Digite o código de 6 dígitos que o seu app autenticador mostra agora.",
     "reasonLabel": "Motivo (fica registrado na auditoria)",
     "confirmPrompt": "Para confirmar, digite",
     "currentPassword": "Senha atual",
@@ -212,6 +213,7 @@
     "serverSuspended": "Servidor suspenso"
   },
   "errors": {
+    "adminConfirmationRequired": "Para agir sobre outro administrador, confirme com sua senha e um código. Atualize a página e tente de novo.",
     "reasonRequired": "Informe o motivo (3 a 500 caracteres).",
     "selfAction": "Você não pode fazer isso na própria conta.",
     "lastAdmin": "Essa conta é o último administrador ativo.",
@@ -290,6 +292,7 @@
     "user.revoke_badge": "Insígnia removida"
   },
   "detail": {
+    "adminTargetConfirmation": "Como esta conta é de outro administrador, confirme com sua senha e um código enviado ao seu e-mail.",
     "fullHistory": "Histórico completo",
     "historyDescription": "Tudo o que a administração registrou sobre esta conta, da ação mais recente à mais antiga.",
     "noHistory": "Nenhuma ação registrada sobre esta conta",
@@ -637,7 +640,7 @@
     "unavailable": "O servidor não tem o pg_dump instalado, então não é possível gerar o backup. Veja \"Backups\" no guia de deploy.",
     "running": "{{name}} está baixando um backup desde {{when}}. Só um backup roda por vez.",
     "dialogTitle": "Baixar backup completo",
-    "dialogDescription": "O arquivo terá hashes de senha, sessões e todas as mensagens da instância. Guarde-o como o próprio banco de dados e criptografe-o ao tirá-lo desta máquina.",
+    "dialogDescription": "O arquivo terá hashes de senha, sessões e todas as mensagens da instância. Guarde-o como o próprio banco de dados e criptografe-o ao tirá-lo desta máquina. Para baixar, confirme com sua senha e um código enviado ao seu e-mail.",
     "dialogConfirm": "Baixar",
     "contentsTitle": "O que contém",
     "contentsDescription": "Tudo o que é preciso para recriar a instância, menos os segredos de configuração.",

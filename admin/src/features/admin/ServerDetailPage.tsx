@@ -205,7 +205,7 @@ function ServerDetail({ id }: { id: string }) {
         description={t('entity.restoreMembers')} confirmLabel={t('entity.reactivateServer')} onSubmit={(reason) => mutate(() => reactivateServer(server.id, reason))} />
       <ReasonDialog open={dialog === 'delete'} onOpenChange={(o) => !o && setDialog(null)} title={t('entity.deleteServerTitle')}
         description={t('entity.deleteServerDescription')} confirmLabel={t('detail.deleteForever')} destructive
-        confirmText={server.name || server.id} onSubmit={async (reason) => { await deleteServer(server.id, reason); setDeleted(true); }} />
+        confirmText={server.name.trim() || server.id} onSubmit={async (reason, confirm) => { await deleteServer(server.id, reason, confirm); setDeleted(true); }} />
       <ReasonDialog open={ownerDialog !== null} onOpenChange={(o) => !o && setDialog(null)} title={t('entity.assignServerOwnerTitle')}
         description={ownerDialog
           ? t('entity.serverOwnerAssignment', { current: server.ownerUsername ? t('entity.currentOwnerIs', { username: server.ownerUsername }) : t('entity.serverHasNoOwner'), username: ownerDialog.user.username })

@@ -10,10 +10,11 @@ import { OTPInput, type OTPStatus } from '@/shared/ui/motion/otp-input';
 import { ERROR_CODES } from '@/shared/api/errorCodes';
 import { useTransientFlag } from '@/shared/hooks/useTransientFlag';
 import { AuthHeading, AuthLink } from './AuthControls';
+import { AuthField } from './AuthField';
 
-/** The second step of a login with two-step verification: the code emailed to the account. A code
- * that expired or ran out of tries can be replaced; a challenge that ended sends the person back to
- * the password. */
+/** The second step of a login with two-step verification: the code emailed to the account, or the one its
+ * authenticator app shows (or, without the phone, one of its recovery codes). An emailed code that expired or ran
+ * out of tries can be replaced; a challenge that ended sends the person back to the password. */
 export function TwoFactorStep({ challenge, onBack, completeLogin, resendLoginCode }: {
   challenge: LoginChallenge;
   onBack: (expired: boolean) => void;
@@ -26,12 +27,15 @@ export function TwoFactorStep({ challenge, onBack, completeLogin, resendLoginCod
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [resent, flashResent] = useTransientFlag();
+  const authenticator = challenge.method === 'authenticator';
+  const [usingRecovery, setUsingRecovery] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
   // typing the 6th digit and clicking the button can both submit before `pending` renders
   const submittingRef = useRef(false);
 
-  async function submit(nextCode = code) {
+  async function submit(nextCode = usingRecovery ? recoveryCode.trim() : code) {
     if (submittingRef.current) return;
-    if (nextCode.length !== 6) {
+    if (usingRecovery ? !nextCode : nextCode.length !== 6) {
       setStatus('error');
       setMessage(t('errors.codeIncomplete'));
       return;
@@ -67,13 +71,40 @@ export function TwoFactorStep({ challenge, onBack, completeLogin, resendLoginCod
     setPending(false);
   }
 
+  function toggleRecovery() {
+    setUsingRecovery(!usingRecovery);
+    setMessage(null);
+    setStatus('idle');
+  }
+
+  const subtitle = authenticator
+    ? t(usingRecovery ? 'twoFactor.recoverySubtitle' : 'twoFactor.authenticatorSubtitle')
+    : t('twoFactor.sentTo', { email: challenge.email });
+
   return (
     <div className="flex flex-col">
-      <AuthHeading title={t('twoFactor.title')} subtitle={t('twoFactor.sentTo', { email: challenge.email })} />
+      <AuthHeading title={t('twoFactor.title')} subtitle={subtitle} />
+      {usingRecovery ? (
+        <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+          <AuthField
+            id="loginRecoveryCode"
+            label={t('twoFactor.recoveryLabel')}
+            hint={t('twoFactor.recoveryHint')}
+            value={recoveryCode}
+            onChange={(value) => { setRecoveryCode(value); setMessage(null); setStatus('idle'); }}
+            error={status === 'error' ? message ?? t('twoFactor.codeError') : undefined}
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoFocus
+            disabled={pending}
+          />
+        </form>
+      ) : (
       <OTPInput
         className="self-center items-center text-center [&>label]:font-semibold [&>label]:text-text-strong"
         label={t('twoFactor.codeLabel')}
-        hint={t('twoFactor.codeHint')}
+        hint={t(authenticator ? 'twoFactor.authenticatorHint' : 'twoFactor.codeHint')}
         errorMessage={message ?? t('twoFactor.codeError')}
         successMessage={t('twoFactor.success')}
         value={code}
@@ -84,6 +115,7 @@ export function TwoFactorStep({ challenge, onBack, completeLogin, resendLoginCod
         autoFocus
         aria-label={t('twoFactor.codeLabel')}
       />
+      )}
       <Button type="button" size="lg" className="mt-5 h-11 w-full text-body" disabled={pending} onClick={() => void submit()}>
         {pending && <CircleNotchIcon size={20} className="animate-spin" />}
         {pending ? t('login.pending') : t('twoFactor.submit')}
@@ -91,9 +123,15 @@ export function TwoFactorStep({ challenge, onBack, completeLogin, resendLoginCod
       {message && status !== 'error' && <ErrorBanner className="mt-4">{message}</ErrorBanner>}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <AuthLink onClick={() => onBack(false)}>{t('twoFactor.back')}</AuthLink>
-        <AuthLink disabled={pending} onClick={() => void resend()}>
-          {resent ? t('twoFactor.resent') : t('twoFactor.resend')}
-        </AuthLink>
+        {authenticator ? (
+          <AuthLink disabled={pending} onClick={toggleRecovery}>
+            {usingRecovery ? t('twoFactor.useAuthenticator') : t('twoFactor.useRecoveryCode')}
+          </AuthLink>
+        ) : (
+          <AuthLink disabled={pending} onClick={() => void resend()}>
+            {resent ? t('twoFactor.resent') : t('twoFactor.resend')}
+          </AuthLink>
+        )}
       </div>
     </div>
   );

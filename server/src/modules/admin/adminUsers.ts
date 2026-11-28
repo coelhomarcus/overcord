@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { attachments, dataExports, messages, serverMembers, servers, users } from '../../db/schema.js';
+import { attachments, dataExports, messages, serverMembers, servers, sessions, users } from '../../db/schema.js';
 import { destroyAdminSessionsForUser, destroyAllSessionsForUser, invalidateSessionsForUser } from '../auth/session.js';
 import { broadcastToKnownPeers, listOnlineUserIds, participants, sendToUser } from '../presence/participants.js';
 import { deleteAvatarFile } from '../attachments/attachmentCleanup.js';
@@ -13,6 +13,7 @@ import { deleteServerCompletely } from '../servers/serverDeletion.js';
 import { countServerMembers } from '../servers/serversRepository.js';
 import { SOCIAL_PAGE_SIZE, decodeTimeCursor, encodeTimeCursor } from '../friendships/cursor.js';
 import { dropUserConnections } from './accountEnforcement.js';
+import { CLI_ACTOR_ID, lockActingAdmin } from './adminActor.js';
 import { decideAdminRoleChange, decideUserAction, pickSuccessor, type AdminRoleAction, type AdminRoleDecision, type UserActionDecision } from './adminPolicy.js';
 import { listAudit, recordAudit, recordAuditFailure, type AuditActor } from './auditLog.js';
 import { logger } from '../../lib/logger.js';
@@ -21,9 +22,16 @@ import type { BadgeId } from '../badges/badgeCatalog.js';
 
 const log = logger.child({ component: 'admin' });
 
-export type UserActionResult<T = object> = ({ code: 'ok' } & T) | { code: 'not_found' | 'forbidden' | 'confirmation_mismatch' | Exclude<UserActionDecision, 'allow'> };
+export type UserActionResult<T = object> = ({ code: 'ok' } & T)
+  | { code: 'not_found' | 'forbidden' | 'confirmation_mismatch' | 'admin_confirmation_required' | Exclude<UserActionDecision, 'allow'> };
 
-export const CLI_ACTOR_ID = 'cli';
+/** `adminConfirmed`: the actor confirmed with their password and an emailed code. Suspending or deleting
+ * another administrator takes the panel away from them as removing the role does, so it needs the same
+ * proof. It is checked under the row locks, so a role granted in between cannot slip past it. */
+interface AdminTargetCheck { adminConfirmed?: boolean }
+
+const needsAdminConfirmation = (target: { id: string; role: string }, actorId: string, { adminConfirmed = false }: AdminTargetCheck) =>
+  target.role === 'admin' && target.id !== actorId && !adminConfirmed;
 
 interface Ctx { actor: AuditActor; reason: string; requestId: string }
 /** The account deletion the person asked for runs from a sweep, with no one acting: `actor` is null. */
@@ -33,24 +41,28 @@ interface PurgeCtx { actor: AuditActor | null; reason: string; requestId: string
  * suspending/deleting each other, or the last two admins racing, serialize
  * and each sees the other's effect. */
 async function lockAdminsAndTarget(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], targetId: string, actorId: string) {
-  const admins = (await tx.execute(sql`select id, status, two_factor_email from users where role = 'admin' order by id for update`)).rows as { id: string; status: string; two_factor_email: boolean }[];
+  const admins = (await tx.execute(sql`
+    select u.id, u.status, a.confirmed_at is not null as has_authenticator
+    from users u left join user_authenticators a on a.user_id = u.id
+    where u.role = 'admin' order by u.id for update of u`)).rows as { id: string; status: string; has_authenticator: boolean }[];
   const [target] = (await tx.execute(sql`
     select id, username, role, status, avatar, avatar_poster, banner, banner_poster, email, locale, deletion_due_at
     from users where id = ${targetId} for update`)).rows as unknown as LockedTarget[];
   // The actor was checked as an admin BEFORE this transaction; a concurrent
   // demotion or suspension may have landed since, so it is re-checked under the
   // lock. The CLI is not an account and is exempt.
-  const actorStillAdmin = actorId === CLI_ACTOR_ID || admins.some((a) => a.id === actorId && a.status === 'active' && a.two_factor_email);
+  const actorStillAdmin = actorId === CLI_ACTOR_ID || admins.some((a) => a.id === actorId && a.status === 'active' && a.has_authenticator);
   return { activeAdminCount: admins.filter((a) => a.status === 'active').length, target, actorStillAdmin };
 }
 
-export async function suspendUser(ctx: Ctx, targetId: string): Promise<UserActionResult> {
+export async function suspendUser(ctx: Ctx, targetId: string, check: AdminTargetCheck = {}): Promise<UserActionResult> {
   const outcome = await db.transaction(async (tx): Promise<UserActionResult<{ revokedInvitationIds: string[] }>> => {
     const { activeAdminCount, target, actorStillAdmin } = await lockAdminsAndTarget(tx, targetId, ctx.actor.id);
     if (!actorStillAdmin) return { code: 'forbidden' };
     if (!target) return { code: 'not_found' };
     const decision = decideUserAction({ action: 'suspend', actorId: ctx.actor.id, targetId, targetRole: target.role, targetStatus: target.status, activeAdminCount });
     if (decision !== 'allow') return { code: decision };
+    if (needsAdminConfirmation(target, ctx.actor.id, check)) return { code: 'admin_confirmation_required' };
     await tx.update(users).set({ status: 'suspended', statusReason: ctx.reason, statusChangedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, targetId));
     const revokedInvitationIds = await revokePendingForUser(tx, targetId);
     await recordAudit({ actor: ctx.actor, action: 'user.suspend', targetType: 'user', targetId, targetLabel: target.username, reason: ctx.reason, requestId: ctx.requestId }, tx);
@@ -114,12 +126,18 @@ export async function reactivateUser(ctx: Ctx, targetId: string): Promise<UserAc
 
 /** Ends every session of the account without suspending it. */
 export async function revokeUserSessions(ctx: Ctx, targetId: string): Promise<UserActionResult> {
-  const [target] = await db.select({ username: users.username }).from(users).where(eq(users.id, targetId)).limit(1);
-  if (!target) return { code: 'not_found' };
-  await destroyAllSessionsForUser(targetId);
+  const outcome = await db.transaction(async (tx): Promise<UserActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
+    const [target] = await tx.select({ username: users.username }).from(users).where(eq(users.id, targetId)).limit(1);
+    if (!target) return { code: 'not_found' };
+    await tx.delete(sessions).where(eq(sessions.userId, targetId));
+    await recordAudit({ actor: ctx.actor, action: 'user.revoke_sessions', targetType: 'user', targetId, targetLabel: target.username, reason: ctx.reason, requestId: ctx.requestId }, tx);
+    return { code: 'ok' };
+  });
+  if (outcome.code !== 'ok') return outcome;
+  invalidateSessionsForUser(targetId);
   dropUserConnections(targetId);
-  await recordAudit({ actor: ctx.actor, action: 'user.revoke_sessions', targetType: 'user', targetId, targetLabel: target.username, reason: ctx.reason, requestId: ctx.requestId });
-  return { code: 'ok' };
+  return outcome;
 }
 
 export type BadgeActionResult = { code: 'ok' } | { code: 'not_found' | 'forbidden' | 'already_held' | 'not_held' };
@@ -236,14 +254,16 @@ export async function purgeUserAccount(ctx: PurgeCtx, targetId: string, check: P
 }
 
 /** An admin deleting someone else's account, confirmed by typing its username. */
-export async function deleteUserAccount(ctx: Ctx, targetId: string, confirm: string): Promise<UserActionResult> {
+export async function deleteUserAccount(ctx: Ctx, targetId: string, confirm: string, check: AdminTargetCheck = {}): Promise<UserActionResult> {
   const [known] = await db.select({ username: users.username }).from(users).where(eq(users.id, targetId)).limit(1);
   if (!known) return { code: 'not_found' };
   if (confirm.trim().toLowerCase() !== known.username.toLowerCase()) return { code: 'confirmation_mismatch' };
   const result = await purgeUserAccount(ctx, targetId, ({ target, activeAdminCount, actorStillAdmin }) => {
     if (!actorStillAdmin) return 'forbidden';
-    const decision = decideUserAction({ action: 'delete', actorId: ctx.actor?.id ?? CLI_ACTOR_ID, targetId, targetRole: target.role, targetStatus: target.status, activeAdminCount });
-    return decision === 'allow' ? 'ok' : decision;
+    const actorId = ctx.actor?.id ?? CLI_ACTOR_ID;
+    const decision = decideUserAction({ action: 'delete', actorId, targetId, targetRole: target.role, targetStatus: target.status, activeAdminCount });
+    if (decision !== 'allow') return decision;
+    return needsAdminConfirmation(target, actorId, check) ? 'admin_confirmation_required' : 'ok';
   });
   return result.code === 'ok' ? { code: 'ok' } : result;
 }

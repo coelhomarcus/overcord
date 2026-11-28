@@ -1,17 +1,19 @@
 import { uploadDir } from './isolatedUploadDir.js';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { adminAuditLogs } from '../../src/db/schema.js';
+import { adminAuditLogs, users } from '../../src/db/schema.js';
 import { createApp } from '../../src/http/app.js';
+import { hashPassword } from '../../src/modules/auth/password.js';
 import { DUMP_FILE, MANIFEST_FILE, README_FILE } from '../../src/modules/backups/backupLayout.js';
 import { claimDownload, issueDownloadToken, releaseDownload, setBackupIdleTimeout } from '../../src/modules/backups/backupDownload.js';
 import { listZipEntries, readBackupZip } from '../../src/modules/backups/backupZipReader.js';
-import { adminHeaders, db, makeAdminSession, makeUser, pool } from './helpers.js';
+import { adminHeaders, authenticatorCode, db, giveAuthenticator, makeAdminSession, makeUser, pool } from './helpers.js';
 
 // The admin backup download end to end, on the real database and disk. pg_dump
 // is a stand-in script (PG_DUMP_BIN): the runner's client tools may be older than
@@ -35,14 +37,28 @@ after(async () => {
 });
 afterEach(() => { process.env.PG_DUMP_BIN = fakePgDump; });
 
+const PASSWORD = 'correct horse battery';
+let passwordHash: Promise<string> | null = null;
+
 async function admin(prefix = 'bkadmin') {
-  const user = await makeUser(prefix, 'admin');
-  return { ...user, token: await makeAdminSession(user.id) };
+  const id = crypto.randomUUID();
+  const username = `${prefix}_${id.slice(0, 8)}`;
+  passwordHash ??= hashPassword(PASSWORD);
+  await db.insert(users).values({ id, username, passwordHash: await passwordHash, role: 'admin', email: `${username}@example.test`, twoFactorEmail: true });
+  await giveAuthenticator(id);
+  return { id, username, token: await makeAdminSession(id) };
 }
 
 const request = (method: 'GET' | 'POST', url: string, token?: string, body?: unknown) => app.inject({
   method, url, headers: { ...adminHeaders(token), ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { payload: JSON.stringify(body) } : {}),
 });
+
+/** Both steps of issuing a link: the password earns a challenge, a code from the admin's app earns the link. */
+async function issue(a: { id: string; token: string }, reason: string) {
+  const sent = await request('POST', '/api/admin/backup/download/request', a.token, { reason, password: PASSWORD });
+  assert.equal(sent.statusCode, 200, sent.body);
+  return request('POST', '/api/admin/backup/download', a.token, { reason, code: await authenticatorCode(a.id) });
+}
 
 describe('admin backup download', () => {
   it('reports what the backup will hold', async () => {
@@ -61,7 +77,7 @@ describe('admin backup download', () => {
     const other = await admin('bkother');
     fs.writeFileSync(path.join(uploadDir, 'f'.repeat(32)), 'stored file bytes');
 
-    const issued = await request('POST', '/api/admin/backup/download', a.token, { reason: 'before the upgrade' });
+    const issued = await issue(a, 'before the upgrade');
     assert.equal(issued.statusCode, 200);
     const { url } = issued.json() as { url: string };
     assert.match(url, /^\/api\/admin\/backup\/download\/[\w-]{40,}$/);
@@ -95,6 +111,7 @@ describe('admin backup download', () => {
   it('needs a reason, an admin and the admin origin to issue a link', async () => {
     const a = await admin();
     const user = await makeUser('bkuser', 'user', true);
+    await giveAuthenticator(user.id); // refused for the role, not for a missing app
     assert.equal((await request('POST', '/api/admin/backup/download', a.token, {})).statusCode, 400);
     assert.equal((await request('POST', '/api/admin/backup/download', await makeAdminSession(user.id), { reason: 'curious' })).statusCode, 403);
     const foreign = await app.inject({
@@ -105,6 +122,26 @@ describe('admin backup download', () => {
     assert.equal((await request('GET', '/api/admin/backup/download/not-a-token', a.token)).statusCode, 404);
   });
 
+  it('issues a link only for the password and an app code bound to the session and the reason', async () => {
+    const a = await admin();
+    const reason = 'before the upgrade';
+    const download = (token: string, body: Record<string, string>) => request('POST', '/api/admin/backup/download', token, { reason, ...body });
+    const refusal = (res: Awaited<ReturnType<typeof request>>) => [res.statusCode, (res.json() as { error: { code: string } }).error.code];
+
+    assert.deepEqual(refusal(await download(a.token, {})), [400, 'invalid_code'], 'a reason alone is not enough');
+    assert.deepEqual(refusal(await request('POST', '/api/admin/backup/download/request', a.token, { reason, password: 'wrong' })), [403, 'invalid_password']);
+
+    const sent = await request('POST', '/api/admin/backup/download/request', a.token, { reason, password: PASSWORD });
+    assert.equal(sent.statusCode, 200);
+    assert.deepEqual(sent.json(), { codeRequired: true, method: 'authenticator' });
+    const code = await authenticatorCode(a.id);
+    assert.deepEqual(refusal(await download(await makeAdminSession(a.id), { code })), [400, 'invalid_code'], 'another session of the same admin');
+    assert.deepEqual(refusal(await request('POST', '/api/admin/backup/download', a.token, { reason: 'another reason', code })), [400, 'invalid_code']);
+    const issued = await download(a.token, { code });
+    assert.equal(issued.statusCode, 200);
+    assert.deepEqual(refusal(await download(a.token, { code })), [400, 'invalid_code'], 'a code works once');
+  });
+
   it('runs one backup at a time', async () => {
     const a = await admin();
     const holder = await admin('bkholder');
@@ -112,7 +149,7 @@ describe('admin backup download', () => {
     assert.equal(held.code, 'ok');
     assert.equal(claimDownload(held.code === 'ok' ? held.token : '', { id: holder.id, username: holder.username }).code, 'ok');
     try {
-      const busy = await request('POST', '/api/admin/backup/download', a.token, { reason: 'second one' });
+      const busy = await request('POST', '/api/admin/backup/download/request', a.token, { reason: 'second one', password: PASSWORD });
       assert.equal(busy.statusCode, 409);
       assert.equal((busy.json() as { error: { code: string } }).error.code, 'backup_running');
       const info = (await request('GET', '/api/admin/backup', a.token)).json() as { running: { by: string } | null };
@@ -127,7 +164,7 @@ describe('admin backup download', () => {
     const failing = path.join(scratch, 'pg_dump-failing');
     fs.writeFileSync(failing, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "pg_dump (PostgreSQL) 17.0"; exit 0; fi\necho "pg_dump: error: query failed" >&2; exit 1\n', { mode: 0o755 });
     process.env.PG_DUMP_BIN = failing;
-    const { url } = (await request('POST', '/api/admin/backup/download', a.token, { reason: 'will fail' })).json() as { url: string };
+    const { url } = (await issue(a, 'will fail')).json() as { url: string };
     // headers are out before the failure, so the response is cut rather than answered with an error
     const res = await request('GET', url, a.token).catch(() => null);
     if (res) assert.ok(!res.rawPayload.includes(MANIFEST_FILE), 'never a complete ZIP');
@@ -136,7 +173,7 @@ describe('admin backup download', () => {
     for (let i = 0; i < 50 && !(await failed()); i++) await new Promise((resolve) => setTimeout(resolve, 100));
     assert.match(String((await failed())?.detail.error), /pg_dump failed/);
     process.env.PG_DUMP_BIN = fakePgDump;
-    assert.equal((await request('POST', '/api/admin/backup/download', a.token, { reason: 'again' })).statusCode, 200, 'the lock was released');
+    assert.equal((await issue(a, 'again')).statusCode, 200, 'the lock was released');
   });
 
   it('stops a download that does not move, so a stalled client cannot hold the lock', async () => {
@@ -146,7 +183,7 @@ describe('admin backup download', () => {
     process.env.PG_DUMP_BIN = stuck;
     setBackupIdleTimeout(400);
     try {
-      const { url } = (await request('POST', '/api/admin/backup/download', a.token, { reason: 'stalls' })).json() as { url: string };
+      const { url } = (await issue(a, 'stalls')).json() as { url: string };
       const started = Date.now();
       await request('GET', url, a.token).catch(() => null);
       assert.ok(Date.now() - started < 15_000, 'the download was cut, not left hanging');
@@ -156,10 +193,11 @@ describe('admin backup download', () => {
       process.env.PG_DUMP_BIN = fakePgDump;
       let next = 0;
       for (let i = 0; i < 50 && next !== 200; i++) {
-        next = (await request('POST', '/api/admin/backup/download', a.token, { reason: 'after the stall' })).statusCode;
+        next = (await request('POST', '/api/admin/backup/download/request', a.token, { reason: 'after the stall', password: PASSWORD })).statusCode;
         if (next !== 200) await new Promise((resolve) => setTimeout(resolve, 200));
       }
       assert.equal(next, 200, 'the lock was released once the script exited');
+      assert.equal((await request('POST', '/api/admin/backup/download', a.token, { reason: 'after the stall', code: await authenticatorCode(a.id) })).statusCode, 200);
     } finally {
       setBackupIdleTimeout();
     }
@@ -169,7 +207,7 @@ describe('admin backup download', () => {
     const a = await admin();
     process.env.PG_DUMP_BIN = path.join(scratch, 'missing-pg_dump');
     assert.equal(((await request('GET', '/api/admin/backup', a.token)).json() as { available: boolean }).available, false);
-    const res = await request('POST', '/api/admin/backup/download', a.token, { reason: 'no tools' });
+    const res = await request('POST', '/api/admin/backup/download/request', a.token, { reason: 'no tools', password: PASSWORD });
     assert.equal(res.statusCode, 503);
     assert.equal((res.json() as { error: { code: string } }).error.code, 'backup_unavailable');
   });

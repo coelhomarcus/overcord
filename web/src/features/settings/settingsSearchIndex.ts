@@ -12,7 +12,7 @@ export interface SearchEntry {
 }
 
 type SearchKey =
-  | 'accountInfo' | 'email' | 'session' | 'deleteAccount' | 'dataExport' | 'password' | 'twoFactor' | 'loginAlerts' | 'sessions' | 'connections' | 'blocked' | 'presence'
+  | 'accountInfo' | 'email' | 'session' | 'deleteAccount' | 'dataExport' | 'password' | 'authenticator' | 'twoFactor' | 'loginAlerts' | 'sessions' | 'connections' | 'blocked' | 'presence'
   | 'theme' | 'density' | 'typography' | 'voice' | 'inputProfile' | 'video' | 'calls' | 'uploads'
   | 'desktopNotifications' | 'sounds' | 'language' | 'timeFormat' | 'desktopDownload' | 'webApp'
   | 'desktopStartup' | 'desktopWindow' | 'desktopUpdates' | 'activity';
@@ -26,6 +26,7 @@ export const SETTINGS_SEARCH_INDEX: SearchEntry[] = [
   { categoryId: 'account', sectionId: 'session', searchKey: 'session' },
   { categoryId: 'account', sectionId: 'delete-account', searchKey: 'deleteAccount' },
   { categoryId: 'security', sectionId: 'password', searchKey: 'password' },
+  { categoryId: 'security', sectionId: 'authenticator', searchKey: 'authenticator' },
   { categoryId: 'security', sectionId: 'two-factor', searchKey: 'twoFactor' },
   { categoryId: 'security', sectionId: 'login-alerts', searchKey: 'loginAlerts' },
   { categoryId: 'security', sectionId: 'sessions', searchKey: 'sessions' },

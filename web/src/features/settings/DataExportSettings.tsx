@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { confirmDataExport, dataExportDownloadUrl, fetchDataExportStatus, requestDataExport } from '@/shared/api/api';
+import { codeSentTo, confirmDataExport, dataExportDownloadUrl, fetchDataExportStatus, requestDataExport } from '@/shared/api/api';
 import type { DataExport, DataExportStatus } from '@/shared/api/api';
 import { describeApiError } from '@/shared/api/errorText';
 import { formatFileSize } from '@/shared/lib/formatBytes';
@@ -33,7 +33,8 @@ export function DataExportSettings() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [maskedEmail, setMaskedEmail] = useState('');
+  // null: the authenticator app shows the code
+  const [maskedEmail, setMaskedEmail] = useState<string | null>('');
   const [otpStatus, setOtpStatus] = useState<OTPStatus>('idle');
   const confirmingRef = useRef(false);
 
@@ -78,7 +79,7 @@ export function DataExportSettings() {
       const result = await requestDataExport(password);
       if ('codeRequired' in result) {
         setPassword('');
-        setMaskedEmail(result.email);
+        setMaskedEmail(codeSentTo(result));
         setPhase('code');
       } else {
         queued(result.export);
@@ -148,7 +149,7 @@ export function DataExportSettings() {
       )}
       {phase === 'code' && (
         <div className={`flex flex-col gap-3 ${SETTINGS_INLINE_PANEL}`}>
-          <p className="text-label text-text-muted">{t('privacy.export.codeSent', { email: maskedEmail })}</p>
+          <p className="text-label text-text-muted">{maskedEmail === null ? t('security.authenticator.prompt') : t('privacy.export.codeSent', { email: maskedEmail })}</p>
           <OTPInput
             label={t('privacy.export.codeLabel')}
             errorMessage={error ?? t('privacy.export.requestFailed')}

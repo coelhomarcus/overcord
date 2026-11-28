@@ -1084,6 +1084,27 @@ export const connectionSyncLimits = pgTable('connection_sync_limits', {
   nextRequestAt: timestamp('next_request_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** An authenticator app (TOTP) for two-step login (modules/auth/authenticators.ts). The secret is sealed with
+ * TOTP_ENCRYPTION_KEY and the account id. A row without `confirmedAt` is a setup not finished yet: it is not a
+ * second factor until a code from the app confirms it. `lastUsedStep` keeps a code from working twice. */
+export const userAuthenticators = pgTable('user_authenticators', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  secretCiphertext: text('secret_ciphertext').notNull(),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  lastUsedStep: bigint('last_used_step', { mode: 'number' }).notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One-time codes for signing in without the authenticator app, shown once when it is set up. Only their
+ * sha256 is stored: each carries about 50 random bits, so a slow hash would add nothing. */
+export const recoveryCodes = pgTable('recovery_codes', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  codeHash: text('code_hash').notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('recovery_codes_user_idx').on(t.userId)]);
+
 /** Keys the instance makes for itself on first boot, so a deploy needs no
  * extra configuration and every restart (or instance) signs the same way. */
 export const instanceSecrets = pgTable('instance_secrets', {

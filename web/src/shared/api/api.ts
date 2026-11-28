@@ -52,19 +52,30 @@ export interface SecurityStatus {
   hasEmail: boolean;
   /** days without use after which a session ends; 0 = never */
   sessionIdleDays: number;
+  /** missing from a server older than authenticator apps; `available` is false without TOTP_ENCRYPTION_KEY */
+  authenticator?: { available: boolean; enabled: boolean; recoveryCodesLeft: number };
 }
 
 export function fetchSecurityStatus(): Promise<SecurityStatus> {
   return apiFetch('/api/auth/security');
 }
 
-/** A code sent to the account's current email, which the matching confirm call takes. With two-step login on,
- * that email is the second factor of every change that could take it away. */
-export interface CurrentEmailCodeSent { codeRequired: true; email: string }
+/** A code sent to the account's current email, which the matching confirm call takes. */
+export interface CurrentEmailCodeSent { codeRequired: true; method?: 'email'; email: string }
+
+/** What a sensitive change asks after the password, with two-step login on: a code sent to the account's current
+ * email, or (`method: 'authenticator'`) one its authenticator app shows. A server older than authenticator apps
+ * sends no `method`. */
+export type SecondFactorRequested = CurrentEmailCodeSent | { codeRequired: true; method: 'authenticator' };
+
+/** The masked address the code went to, or null when the authenticator app shows it. */
+export function codeSentTo(asked: SecondFactorRequested): string | null {
+  return asked.method === 'authenticator' ? null : asked.email;
+}
 
 /** Turning them on asks nothing; turning them off asks the password and, with two-step login on, a code
  * (`confirmLoginAlertDisable`). */
-export function setLoginAlerts(enabled: boolean, password?: string): Promise<{ loginAlertEnabled: boolean } | CurrentEmailCodeSent> {
+export function setLoginAlerts(enabled: boolean, password?: string): Promise<{ loginAlertEnabled: boolean } | SecondFactorRequested> {
   return apiFetch('/api/auth/login-alerts', { method: 'PUT', body: JSON.stringify({ enabled, password }) });
 }
 
@@ -81,12 +92,46 @@ export function confirmTwoFactorEnable(code: string): Promise<{ twoFactorEnabled
 }
 
 /** The password earns a code to the account email (`confirmTwoFactorDisable`); already off, it answers so. */
-export function disableTwoFactor(password: string): Promise<{ twoFactorEnabled: boolean } | CurrentEmailCodeSent> {
+export function disableTwoFactor(password: string): Promise<{ twoFactorEnabled: boolean } | SecondFactorRequested> {
   return apiFetch('/api/auth/two-factor/disable', { method: 'POST', body: JSON.stringify({ password }) });
 }
 
 export function confirmTwoFactorDisable(code: string): Promise<{ twoFactorEnabled: boolean }> {
   return apiFetch('/api/auth/two-factor/disable/confirm', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+/** A new key for the authenticator app (`uri` goes in the QR code), or first a code to the account email when
+ * two-step login by email is on (`verifyAuthenticatorSetupEmail`). */
+export interface AuthenticatorSetup { secret: string; uri: string }
+export function startAuthenticatorSetup(password: string): Promise<AuthenticatorSetup | CurrentEmailCodeSent> {
+  return apiFetch('/api/auth/authenticator/setup', { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+export function verifyAuthenticatorSetupEmail(code: string): Promise<AuthenticatorSetup> {
+  return apiFetch('/api/auth/authenticator/setup/verify', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+/** A code from the app turns it on; the recovery codes are only ever shown in this answer. */
+export function confirmAuthenticatorSetup(code: string): Promise<{ recoveryCodes: string[] }> {
+  return apiFetch('/api/auth/authenticator/confirm', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+/** The password earns a challenge the app (or a recovery code) answers. */
+export function requestAuthenticatorDisable(password: string): Promise<{ codeRequired: true; method: 'authenticator' }> {
+  return apiFetch('/api/auth/authenticator/disable', { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+export function confirmAuthenticatorDisable(code: string): Promise<{ authenticatorEnabled: false }> {
+  return apiFetch('/api/auth/authenticator/disable/confirm', { method: 'POST', body: JSON.stringify({ code }) });
+}
+
+export function requestRecoveryCodes(password: string): Promise<{ codeRequired: true; method: 'authenticator' }> {
+  return apiFetch('/api/auth/authenticator/recovery-codes', { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+/** A new set of recovery codes; the earlier ones stop working. */
+export function confirmRecoveryCodes(code: string): Promise<{ recoveryCodes: string[] }> {
+  return apiFetch('/api/auth/authenticator/recovery-codes/confirm', { method: 'POST', body: JSON.stringify({ code }) });
 }
 
 /** Keeps this session and ends every other one. */
@@ -165,7 +210,7 @@ export function changeUsername(username: string, password: string): Promise<{ us
 
 /** `{ ok }`: a code went to the new address (`confirmEmailChange`). With two-step login on, a code goes to the
  * current address first (`verifyEmailChangeCurrent`), which earns the one to the new address. */
-export function requestEmailChange(email: string, password: string): Promise<{ ok: true } | CurrentEmailCodeSent> {
+export function requestEmailChange(email: string, password: string): Promise<{ ok: true } | SecondFactorRequested> {
   return apiFetch('/api/auth/email/change/request', { method: 'POST', body: JSON.stringify({ email, password }) });
 }
 
@@ -181,7 +226,7 @@ export function confirmEmailChange(email: string, code: string): Promise<{ user:
 /** Deleting your own account: with two-step login on, the password earns an emailed code first
  * (`confirmAccountDeletion`); otherwise the deletion is scheduled at once. Either way the account is then
  * signed out everywhere, this browser included. */
-export function requestAccountDeletion(password: string): Promise<{ deletionDueAt: string } | CurrentEmailCodeSent> {
+export function requestAccountDeletion(password: string): Promise<{ deletionDueAt: string } | SecondFactorRequested> {
   return apiFetch('/api/auth/account/deletion/request', { method: 'POST', body: JSON.stringify({ password }) });
 }
 
@@ -206,7 +251,7 @@ export function fetchDataExportStatus(): Promise<DataExportStatus> {
 }
 
 /** The password queues the copy, or with two-step login on earns an emailed code (`confirmDataExport`). */
-export function requestDataExport(password: string): Promise<{ export: DataExport } | CurrentEmailCodeSent> {
+export function requestDataExport(password: string): Promise<{ export: DataExport } | SecondFactorRequested> {
   return apiFetch('/api/account/data-export', { method: 'POST', body: JSON.stringify({ password }) });
 }
 

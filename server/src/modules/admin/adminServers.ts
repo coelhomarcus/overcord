@@ -10,13 +10,14 @@ import { serverMemberIds } from '../servers/serversRepository.js';
 import { revokeCallAccess } from '../calls/callAccess.js';
 import { enforceCallPermissions } from '../calls/callPermissions.js';
 import { recordAudit, recordAuditFailure, listAudit, type AuditActor } from './auditLog.js';
+import { lockActingAdmin } from './adminActor.js';
 import { logger } from '../../lib/logger.js';
 
 const log = logger.child({ component: 'admin' });
 
 interface Ctx { actor: AuditActor; reason: string; requestId: string }
 
-export type ServerActionResult = { code: 'ok' } | { code: 'not_found' | 'already_suspended' | 'not_suspended' | 'not_member' };
+export type ServerActionResult = { code: 'ok' } | { code: 'not_found' | 'forbidden' | 'confirmation_mismatch' | 'already_suspended' | 'not_suspended' | 'not_member' };
 
 const createdAtIso = sql<string>`to_char(${servers.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 // Written with an explicit alias: in a single-table select drizzle leaves
@@ -96,6 +97,7 @@ async function announce(serverId: string): Promise<void> {
 
 export async function suspendServer(ctx: Ctx, serverId: string): Promise<ServerActionResult> {
   const outcome = await db.transaction(async (tx): Promise<ServerActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
     const locked = (await tx.execute(sql`select id, name, status from servers where id = ${serverId} for update`)).rows as { id: string; name: string; status: string }[];
     const server = locked[0];
     if (!server) return { code: 'not_found' };
@@ -115,6 +117,7 @@ export async function suspendServer(ctx: Ctx, serverId: string): Promise<ServerA
 
 export async function reactivateServer(ctx: Ctx, serverId: string): Promise<ServerActionResult> {
   const outcome = await db.transaction(async (tx): Promise<ServerActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
     const locked = (await tx.execute(sql`select id, name, status from servers where id = ${serverId} for update`)).rows as { id: string; name: string; status: string }[];
     const server = locked[0];
     if (!server) return { code: 'not_found' };
@@ -131,6 +134,7 @@ export async function reactivateServer(ctx: Ctx, serverId: string): Promise<Serv
  * becomes its owner, under the server lock. The admin never becomes a member. */
 export async function assignServerOwner(ctx: Ctx, serverId: string, newOwnerId: string): Promise<ServerActionResult> {
   const outcome = await db.transaction(async (tx): Promise<ServerActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
     const locked = (await tx.execute(sql`select id, name, owner_id from servers where id = ${serverId} for update`)).rows as { id: string; name: string; owner_id: string | null }[];
     const server = locked[0];
     if (!server) return { code: 'not_found' };
@@ -152,18 +156,30 @@ export async function assignServerOwner(ctx: Ctx, serverId: string, newOwnerId: 
   return { code: 'ok' };
 }
 
-export async function deleteServerAsAdmin(ctx: Ctx, serverId: string): Promise<ServerActionResult> {
-  const [server] = await db.select({ name: servers.name }).from(servers).where(eq(servers.id, serverId)).limit(1);
-  if (!server) return { code: 'not_found' };
-  // audit first, in its own row: the server (and its files) are about to stop existing
-  await recordAudit({ actor: ctx.actor, action: 'server.delete', targetType: 'server', targetId: serverId, targetLabel: server.name, reason: ctx.reason, requestId: ctx.requestId });
-  try {
-    const deleted = await deleteServerCompletely(serverId);
-    if (!deleted) return { code: 'not_found' };
-    log.warn('server deleted by an admin', { actorId: ctx.actor.id, serverId, members: deleted.memberIds.length });
-  } catch (err) {
-    await recordAuditFailure({ actor: ctx.actor, action: 'server.delete', targetType: 'server', targetId: serverId, targetLabel: server.name, reason: ctx.reason, requestId: ctx.requestId }, err);
-    throw err;
-  }
-  return { code: 'ok' };
+/** What the admin types to confirm deleting a server: its name, or its id when it has none. */
+function serverDeletionConfirmation(server: { id: string; name: string }): string {
+  return server.name.trim() || server.id;
+}
+
+/** Deletes a server for good, confirmed by typing its name (`serverDeletionConfirmation`), as deleting an account
+ * is by typing its username. */
+export async function deleteServerAsAdmin(ctx: Ctx, serverId: string, confirm: string): Promise<ServerActionResult> {
+  // The deletion is not one transaction (files go with it), so this one only holds the actor's rows while it runs.
+  return db.transaction(async (tx): Promise<ServerActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
+    const [server] = await db.select({ name: servers.name }).from(servers).where(eq(servers.id, serverId)).limit(1);
+    if (!server) return { code: 'not_found' };
+    if (confirm.trim().toLowerCase() !== serverDeletionConfirmation({ id: serverId, name: server.name }).toLowerCase()) return { code: 'confirmation_mismatch' };
+    // audit first, in its own row: the server (and its files) are about to stop existing
+    await recordAudit({ actor: ctx.actor, action: 'server.delete', targetType: 'server', targetId: serverId, targetLabel: server.name, reason: ctx.reason, requestId: ctx.requestId });
+    try {
+      const deleted = await deleteServerCompletely(serverId);
+      if (!deleted) return { code: 'not_found' };
+      log.warn('server deleted by an admin', { actorId: ctx.actor.id, serverId, members: deleted.memberIds.length });
+    } catch (err) {
+      await recordAuditFailure({ actor: ctx.actor, action: 'server.delete', targetType: 'server', targetId: serverId, targetLabel: server.name, reason: ctx.reason, requestId: ctx.requestId }, err);
+      throw err;
+    }
+    return { code: 'ok' };
+  });
 }

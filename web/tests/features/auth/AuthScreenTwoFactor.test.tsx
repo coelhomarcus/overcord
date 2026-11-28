@@ -92,3 +92,35 @@ describe('AuthScreen with two-step login', () => {
     expect(screen.queryByLabelText('Código de verificação')).not.toBeInTheDocument();
   });
 });
+
+describe('AuthScreen with an authenticator app', () => {
+  const APP_CHALLENGE = { challenge: 'd'.repeat(43), method: 'authenticator' as const };
+
+  it('asks for the app code, never offers to resend, and finishes with it', async () => {
+    const user = userEvent.setup();
+    login.mockResolvedValue(APP_CHALLENGE);
+    completeLogin.mockResolvedValue(undefined);
+    render(<AuthScreen />);
+    await signIn(user);
+
+    expect(await screen.findByText(/Abra seu app autenticador/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reenviar código' })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Código de verificação'), '654321');
+    await waitFor(() => expect(completeLogin).toHaveBeenCalledWith(APP_CHALLENGE.challenge, '654321'));
+  });
+
+  it('takes a recovery code instead, as typed', async () => {
+    const user = userEvent.setup();
+    login.mockResolvedValue(APP_CHALLENGE);
+    completeLogin.mockResolvedValue(undefined);
+    render(<AuthScreen />);
+    await signIn(user);
+
+    await user.click(await screen.findByRole('button', { name: 'Usar um código de recuperação' }));
+    await user.type(screen.getByLabelText('Código de recuperação'), 'abcde-fghjk');
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await waitFor(() => expect(completeLogin).toHaveBeenCalledWith(APP_CHALLENGE.challenge, 'abcde-fghjk'));
+    await user.click(screen.getByRole('button', { name: 'Usar o app autenticador' }));
+    expect(screen.getByLabelText('Código de verificação')).toBeInTheDocument();
+  });
+});

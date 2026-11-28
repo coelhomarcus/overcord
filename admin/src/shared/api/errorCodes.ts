@@ -1,6 +1,7 @@
 // API error codes the administration site handles explicitly.
 export const ERROR_CODES = {
   action_failed: 'action_failed',
+  admin_confirmation_required: 'admin_confirmation_required',
   already_admin: 'already_admin',
   already_closed: 'already_closed',
   already_held: 'already_held',

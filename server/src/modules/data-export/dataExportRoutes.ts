@@ -4,7 +4,7 @@ import { config } from '../../config/env.js';
 import { parseCookies } from '../../http/cookies.js';
 import { jsonBody, sendError, sendJson } from '../../http/respond.js';
 import { recordAudit } from '../admin/auditLog.js';
-import { confirmPassword, sendCurrentEmailCode, verifyCurrentEmailCode } from '../auth/accountConfirmation.js';
+import { confirmPassword, secondFactorOf, sendSecondFactorChallenge, verifySecondFactor } from '../auth/accountConfirmation.js';
 import { resolveSession } from '../auth/session.js';
 import { findById } from '../users/users.js';
 import { findDownload, getExportStatus, requestDataExport } from './dataExport.js';
@@ -38,25 +38,25 @@ async function queueExport(request: FastifyRequest, reply: FastifyReply, sess: {
   sendJson(reply, 202, { export: result.export });
 }
 
-/** The password, then either the export (202) or, with two-step login on, a code to the account's email
- * (`{ codeRequired, email }`) that `handleConfirm` takes. */
+/** The password, then either the export (202) or, with two-step login on, its second factor (`{ codeRequired,
+ * method }`: a code from the authenticator app, or one sent to the account's email) that `handleConfirm` takes. */
 async function handleRequest(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const sess = await sessionFor(request);
   if (!sess) return sendError(reply, 401, 'unauthenticated', 'Não autenticado.');
   if (!(await confirmPassword(reply, sess, String(jsonBody(request.body).password ?? '')))) return;
   const user = await findById(sess.userId);
   if (!user) return sendError(reply, 404, 'user_not_found', 'Conta não encontrada.');
-  if (!user.twoFactorEmail) return queueExport(request, reply, sess);
+  if (!(await secondFactorOf(user))) return queueExport(request, reply, sess);
   // no code for a request the daily limit would refuse anyway
   const { nextRequestAt } = await getExportStatus(sess.userId);
   if (nextRequestAt) return rateLimited(reply, new Date(nextRequestAt));
-  return sendCurrentEmailCode(reply, user, 'data_export');
+  return sendSecondFactorChallenge(reply, user, 'data_export');
 }
 
 async function handleConfirm(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const sess = await sessionFor(request);
   if (!sess) return sendError(reply, 401, 'unauthenticated', 'Não autenticado.');
-  if (!(await verifyCurrentEmailCode(request, reply, sess, 'data_export'))) return;
+  if (!(await verifySecondFactor(request, reply, sess, 'data_export'))) return;
   return queueExport(request, reply, sess);
 }
 

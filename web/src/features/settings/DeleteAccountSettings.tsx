@@ -4,7 +4,7 @@ import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
-import { confirmAccountDeletion, requestAccountDeletion } from '@/shared/api/api';
+import { codeSentTo, confirmAccountDeletion, requestAccountDeletion } from '@/shared/api/api';
 import { describeApiError } from '@/shared/api/errorText';
 import { ROUTES } from '@/shared/lib/routes';
 import { OTPInput, type OTPStatus } from '@/shared/ui/motion/otp-input';
@@ -29,7 +29,8 @@ export function DeleteAccountSettings() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
-  const [maskedEmail, setMaskedEmail] = useState('');
+  // null: the authenticator app shows the code
+  const [maskedEmail, setMaskedEmail] = useState<string | null>('');
   const [otpStatus, setOtpStatus] = useState<OTPStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -58,7 +59,7 @@ export function DeleteAccountSettings() {
       const result = await requestAccountDeletion(password);
       if ('codeRequired' in result) {
         setPassword('');
-        setMaskedEmail(result.email);
+        setMaskedEmail(codeSentTo(result));
         setPhase('code');
       } else {
         await leave(result.deletionDueAt);
@@ -124,7 +125,7 @@ export function DeleteAccountSettings() {
       )}
       {phase === 'code' && (
         <div className={`flex flex-col gap-3 ${SETTINGS_INLINE_PANEL}`}>
-          <p className="text-label text-text-muted">{t('account.delete.codeSent', { email: maskedEmail })}</p>
+          <p className="text-label text-text-muted">{maskedEmail === null ? t('security.authenticator.prompt') : t('account.delete.codeSent', { email: maskedEmail })}</p>
           <OTPInput
             label={t('account.delete.codeLabel')}
             errorMessage={error ?? t('account.delete.failed')}

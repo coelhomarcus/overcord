@@ -93,6 +93,13 @@
     "confirmFailed": "Não foi possível vincular o e-mail."
   },
   "twoFactor": {
+    "authenticatorSubtitle": "Abra seu app autenticador e digite o código de 6 dígitos da Overcord.",
+    "authenticatorHint": "O código muda a cada 30 segundos.",
+    "useRecoveryCode": "Usar um código de recuperação",
+    "useAuthenticator": "Usar o app autenticador",
+    "recoverySubtitle": "Digite um dos códigos de recuperação que você guardou. Cada um funciona só uma vez.",
+    "recoveryLabel": "Código de recuperação",
+    "recoveryHint": "No formato xxxxx-xxxxx.",
     "title": "Verificação em duas etapas",
     "sentTo": "Enviamos um código para {{email}}. Ele expira em 10 minutos.",
     "codeLabel": "Código de verificação",

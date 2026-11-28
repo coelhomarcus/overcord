@@ -1,6 +1,6 @@
 import { test, expect } from '../../fixtures/test';
 import { acceptInvite, createInvite, createServer } from '../../fixtures/api';
-import { enableTwoFactor, signInAdminThroughApi } from '../../fixtures/admin';
+import { enableAuthenticator, signInAdminThroughApi } from '../../fixtures/admin';
 import { ADMIN_URL, grantAdmin } from '../../stack/stack';
 
 test.describe('reports and administration', () => {
@@ -8,7 +8,7 @@ test.describe('reports and administration', () => {
     const alice = await users.create('alice');
     const bob = await users.create('bob');
     const admin = await users.create('admin');
-    await enableTwoFactor(admin);
+    await enableAuthenticator(admin);
     grantAdmin(admin.username);
     await signInAdminThroughApi(admin);
     const server = await createServer(alice.api, 'E2E reports');
@@ -42,7 +42,7 @@ test.describe('reports and administration', () => {
   test('suspending an account ends its session; only an admin can do it', async ({ users }) => {
     const alice = await users.create('alice');
     const admin = await users.create('admin');
-    await enableTwoFactor(admin);
+    await enableAuthenticator(admin);
     grantAdmin(admin.username);
     await signInAdminThroughApi(admin);
 

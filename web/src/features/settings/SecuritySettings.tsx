@@ -9,11 +9,13 @@ import { LoadError } from './LoadError';
 import { LoginAlertSettings } from './LoginAlertSettings';
 import { PasswordSettings } from './PasswordSettings';
 import { SessionsSettings } from './SessionsSettings';
+import { AuthenticatorSettings } from './AuthenticatorSettings';
 import { TwoFactorSettings } from './TwoFactorSettings';
 
 type Load<T> = { status: 'loading' } | { status: 'error' } | { status: 'ready'; value: T };
 
-/** The account's own security: its password, two-step login by email and the browsers signed in to it. */
+/** The account's own security: its password, two-step login (an authenticator app or the email) and the browsers
+ * signed in to it. */
 export function SecuritySettings() {
   const { t } = useTranslation('settings');
   const [security, setSecurity] = useState<Load<SecurityStatus>>({ status: 'loading' });
@@ -39,6 +41,19 @@ export function SecuritySettings() {
       <SettingsSection id="password" title={t('catalog.sections.password')}>
         <PasswordSettings onChanged={loadSessions} />
       </SettingsSection>
+
+      {(security.status !== 'ready' || security.value.authenticator) && (
+        <SettingsSection id="authenticator" title={t('catalog.sections.authenticator')} description={t('security.authenticator.sectionDescription')}>
+          {security.status === 'loading' && <RowsSkeleton count={1} label={t('security.loading')} />}
+          {security.status === 'error' && <LoadError message={t('security.loadFailed')} onRetry={() => { setSecurity({ status: 'loading' }); loadSecurity(); }} />}
+          {security.status === 'ready' && security.value.authenticator && (
+            <AuthenticatorSettings
+              status={security.value.authenticator}
+              onChange={(authenticator) => setSecurity({ status: 'ready', value: { ...security.value, authenticator } })}
+            />
+          )}
+        </SettingsSection>
+      )}
 
       <SettingsSection id="two-factor" title={t('catalog.sections.twoFactor')}>
         {security.status === 'loading' && <RowsSkeleton count={1} label={t('security.loading')} />}

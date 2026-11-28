@@ -5,7 +5,7 @@ import { sendError } from './respond.js';
 
 // The admin host reaches only these routes of the backend. Everything else on that host is the
 // admin build or a 404, so the public app's API, socket and service worker never answer there.
-const BACKEND_PATHS = /^\/(?:api\/admin(?:[/?]|$)|api\/csp-reports(?:\?|$)|uploads\/|(?:healthz|readyz)(?:\?|$))/;
+const BACKEND_PATHS = /^\/(?:api\/admin(?:[/?]|$)|api\/(?:csp-reports|client-logs)(?:\?|$)|uploads\/|(?:healthz|readyz)(?:\?|$))/;
 
 function listFiles(dir: string, prefix = ''): string[] {
   let entries: fs.Dirent[];

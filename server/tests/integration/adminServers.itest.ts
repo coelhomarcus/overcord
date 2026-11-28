@@ -6,7 +6,7 @@ import { config } from '../../src/config/env.js';
 import { adminAuditLogs, messages, servers } from '../../src/db/schema.js';
 import { createApp } from '../../src/http/app.js';
 import { createSession } from '../../src/modules/auth/session.js';
-import { adminHeaders, makeAdminSession, makeServerWithMembers, makeUser, db, pool } from './helpers.js';
+import { adminHeaders, db, giveAuthenticator, makeAdminSession, makeServerWithMembers, makeUser, pool } from './helpers.js';
 
 let app: FastifyInstance;
 before(async () => { app = createApp(); await app.ready(); });
@@ -15,6 +15,8 @@ after(async () => { await app.close(); await pool.end(); });
 interface Actor { id: string; username: string; cookie: string; adminToken: string }
 async function actor(prefix: string, role: 'user' | 'admin' = 'user'): Promise<Actor> {
   const user = await makeUser(prefix, role, true);
+  // a plain account with an app too, so a refusal below is about the role, not the missing app
+  if (role === 'user') await giveAuthenticator(user.id);
   return { ...user, cookie: `${config.SESSION_COOKIE}=${(await createSession(user.id)).rawToken}`, adminToken: await makeAdminSession(user.id) };
 }
 
@@ -69,7 +71,13 @@ describe('admin servers and webhooks (real Postgres)', () => {
     assert.equal((await db.select({ ownerId: servers.ownerId }).from(servers).where(eq(servers.id, serverId)))[0]!.ownerId, member.id);
     assert.equal((await call(admin, 'POST', `/api/admin/servers/${serverId}/owner`, { ...reason, userId: admin.id })).status, 409, 'only a member can own it');
 
-    assert.equal((await call(admin, 'DELETE', `/api/admin/servers/${serverId}`, reason)).status, 200);
+    const deleteAs = (confirm?: string) => call(admin, 'DELETE', `/api/admin/servers/${serverId}`, { ...reason, ...(confirm === undefined ? {} : { confirm }) });
+    for (const wrong of [undefined, '', 'Outro']) {
+      const refused = await deleteAs(wrong);
+      assert.deepEqual([refused.status, refused.body.error.code], [400, 'confirmation_mismatch'], `confirm ${String(wrong)}`);
+    }
+    assert.equal((await db.select().from(servers).where(eq(servers.id, serverId))).length, 1, 'nothing was deleted');
+    assert.equal((await deleteAs(' ciclo ')).status, 200, 'the name, in any case');
     assert.equal((await db.select().from(servers).where(eq(servers.id, serverId))).length, 0);
     assert.equal((await db.select().from(messages).where(eq(messages.conversationId, textChannelId))).length, 0);
 

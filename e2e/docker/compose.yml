@@ -57,6 +57,8 @@ services:
       APP_URL: http://localhost:8080
       # The admin site, served by the same container on another host.
       ADMIN_URL: http://127.0.0.1:8080
+      # a test key, so two-step login with an authenticator app is available
+      TOTP_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
       COOKIE_SECURE: "0"
       REGISTRATIONS_PER_IP_PER_HOUR: "100000"
       MAX_NEW_ACCOUNTS_PER_HOUR: "100000"

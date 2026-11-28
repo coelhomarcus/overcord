@@ -6,7 +6,7 @@ import { useAuth } from '@/state/AuthContext';
 import { Label } from '@/shared/ui/primitives/label';
 import { Button } from '@/shared/ui/primitives/button';
 import { Input } from '@/shared/ui/primitives/input';
-import { confirmEmailChange, requestEmailChange, verifyEmailChangeCurrent } from '@/shared/api/api';
+import { codeSentTo, confirmEmailChange, requestEmailChange, verifyEmailChangeCurrent } from '@/shared/api/api';
 import { describeApiError } from '@/shared/api/errorText';
 import { EMAIL_RE, MAX_EMAIL_LEN } from '@/features/auth/credentialRules';
 import { OTPInput, type OTPStatus } from '@/shared/ui/motion/otp-input';
@@ -53,7 +53,8 @@ export function EmailSettings({ currentEmail }: { currentEmail: string | null })
   // one the code was actually sent to.
   const [targetEmail, setTargetEmail] = useState('');
   const [code, setCode] = useState('');
-  const [maskedCurrentEmail, setMaskedCurrentEmail] = useState('');
+  // null: the authenticator app shows the code
+  const [maskedCurrentEmail, setMaskedCurrentEmail] = useState<string | null>('');
   const [endedSessions, setEndedSessions] = useState(0);
   const [otpStatus, setOtpStatus] = useState<OTPStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export function EmailSettings({ currentEmail }: { currentEmail: string | null })
       setCode('');
       setOtpStatus('idle');
       if ('codeRequired' in result) {
-        setMaskedCurrentEmail(result.email);
+        setMaskedCurrentEmail(codeSentTo(result));
         setPhase('current-code');
       } else {
         setPhase('requested');
@@ -234,13 +235,15 @@ export function EmailSettings({ currentEmail }: { currentEmail: string | null })
       <div className="flex flex-col gap-3">
         <p className="text-label text-text-muted">
           {askingCurrent
-            ? t('email.currentCodeSent', { email: maskedCurrentEmail, newEmail: targetEmail })
+            ? maskedCurrentEmail === null
+              ? t('email.currentAuthenticatorPrompt', { newEmail: targetEmail })
+              : t('email.currentCodeSent', { email: maskedCurrentEmail, newEmail: targetEmail })
             : t('email.codeSent', { email: targetEmail })}
         </p>
         <OTPInput
           key={phase}
           label={askingCurrent ? t('email.currentCodeLabel') : t('email.codeLabel')}
-          hint={t('email.codeHint')}
+          hint={askingCurrent && maskedCurrentEmail === null ? t('security.authenticator.appCodeHint') : t('email.codeHint')}
           errorMessage={error ?? t('email.codeError')}
           successMessage={t('email.codeSuccess')}
           value={code}

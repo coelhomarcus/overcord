@@ -58,22 +58,29 @@ export interface AdminUserDetail {
   history: AuditRow[];
 }
 
+/** What a confirmed action asks after the password: a code sent to the admin's email, or (`method: 'authenticator'`)
+ * one their authenticator app shows. A server older than authenticator apps sends no `method`. */
+export type SecondFactorRequested = { codeRequired: true; method?: 'email'; email: string } | { codeRequired: true; method: 'authenticator' };
+
 export const fetchAdminUsers = (filters: { q?: string; status?: string; role?: string; from?: string; to?: string }, cursor: string | null) =>
   adminFetch<Page<AdminUserRow>>(`/api/admin/users${qs({ ...filters, cursor })}`);
 export const fetchAdminUser = (id: string) => adminFetch<AdminUserDetail>(`/api/admin/users/${encodeURIComponent(id)}`);
-export const suspendUser = (id: string, reason: string) => post(`/api/admin/users/${encodeURIComponent(id)}/suspend`, { reason });
+// `code`: the emailed confirmation, needed when the account is another administrator's
+export const suspendUser = (id: string, reason: string, code?: string) => post(`/api/admin/users/${encodeURIComponent(id)}/suspend`, { reason, code });
+export const requestAdminAccountCode = (id: string, action: 'suspend' | 'delete', reason: string, password: string) =>
+  post<SecondFactorRequested>(`/api/admin/users/${encodeURIComponent(id)}/${action}/request`, { reason, password });
 export const reactivateUser = (id: string, reason: string) => post(`/api/admin/users/${encodeURIComponent(id)}/reactivate`, { reason });
 const adminRolePath = (id: string, action: 'grant' | 'revoke') => `/api/admin/users/${encodeURIComponent(id)}/${action}-admin`;
 export const requestAdminRoleCode = (id: string, action: 'grant' | 'revoke', reason: string, password: string) =>
-  post<{ codeRequired: true; email: string }>(`${adminRolePath(id, action)}/request`, { reason, password });
+  post<SecondFactorRequested>(`${adminRolePath(id, action)}/request`, { reason, password });
 export const changeAdminRole = (id: string, action: 'grant' | 'revoke', reason: string, code: string) =>
   post(adminRolePath(id, action), { reason, code });
 export const revokeUserSessions = (id: string, reason: string) => post(`/api/admin/users/${encodeURIComponent(id)}/revoke-sessions`, { reason });
 export const grantBadge = (id: string, badge: BadgeId, reason: string) => post(`/api/admin/users/${encodeURIComponent(id)}/badges/${badge}`, { reason });
 export const revokeBadge = (id: string, badge: BadgeId, reason: string) =>
   adminFetch<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}/badges/${badge}`, { method: 'DELETE', body: JSON.stringify({ reason }) });
-export const deleteUser = (id: string, reason: string, confirm: string) =>
-  adminFetch<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason, confirm }) });
+export const deleteUser = (id: string, reason: string, confirm: string, code?: string) =>
+  adminFetch<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason, confirm, code }) });
 
 // ---- servers -----------------------------------------------------------------
 
@@ -95,8 +102,9 @@ export const fetchAdminServer = (id: string, cursor?: string | null) => adminFet
 export const suspendServer = (id: string, reason: string) => post(`/api/admin/servers/${encodeURIComponent(id)}/suspend`, { reason });
 export const reactivateServer = (id: string, reason: string) => post(`/api/admin/servers/${encodeURIComponent(id)}/reactivate`, { reason });
 export const assignServerOwner = (id: string, userId: string, reason: string) => post(`/api/admin/servers/${encodeURIComponent(id)}/owner`, { userId, reason });
-export const deleteServer = (id: string, reason: string) =>
-  adminFetch<{ ok: true }>(`/api/admin/servers/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason }) });
+/** `confirm`: the server's name as typed (its id when it has none); the server checks it. */
+export const deleteServer = (id: string, reason: string, confirm: string) =>
+  adminFetch<{ ok: true }>(`/api/admin/servers/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason, confirm }) });
 
 // ---- webhooks ----------------------------------------------------------------
 
@@ -191,6 +199,8 @@ export interface BackupInfo {
 
 export const fetchBackupInfo = () => adminFetch<BackupInfo>('/api/admin/backup');
 /** A one-time link to the ZIP, valid for a minute and only for this admin. */
-export const requestBackupDownload = (reason: string) => post<{ url: string; expiresAt: string }>('/api/admin/backup/download', { reason });
+export const requestBackupCode = (reason: string, password: string) =>
+  post<SecondFactorRequested>('/api/admin/backup/download/request', { reason, password });
+export const requestBackupDownload = (reason: string, code: string) => post<{ url: string; expiresAt: string }>('/api/admin/backup/download', { reason, code });
 export const sweepOrphans = (input: { dryRun: true } | { dryRun: false; reason: string }) =>
   adminFetch<{ result: SweepResult }>('/api/admin/system/sweep-orphans', { method: 'POST', body: JSON.stringify(input) });

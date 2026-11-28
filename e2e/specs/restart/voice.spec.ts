@@ -1,5 +1,5 @@
 import { test, expect } from '../../fixtures/test';
-import { enableTwoFactor, readAdminCallMetrics, signInAdminThroughApi } from '../../fixtures/admin';
+import { enableAuthenticator, readAdminCallMetrics, signInAdminThroughApi } from '../../fixtures/admin';
 import { acceptInvite, createInvite, createServer } from '../../fixtures/api';
 import { deploy, grantAdmin, restartLiveKit } from '../../stack/stack';
 import { expectStreamImage, installScreenCapture, screenTile, watchButton } from '../../fixtures/screenShare';
@@ -38,7 +38,7 @@ test('a redeploy and an SFU restart restore only the chosen screen', async ({ us
   const alice = await users.create('alice');
   const bob = await users.create('bob');
   grantAdmin(alice.username);
-  await enableTwoFactor(alice);
+  await enableAuthenticator(alice);
   await signInAdminThroughApi(alice);
   const server = await createServer(alice.api, 'E2E watch restart');
   await acceptInvite(bob.api, await createInvite(alice.api, server.id));

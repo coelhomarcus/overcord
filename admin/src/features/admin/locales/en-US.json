@@ -194,6 +194,7 @@
     "searchNameOrServer": "Search by name, server or ID"
   },
   "dialog": {
+    "authenticatorPrompt": "Type the 6-digit code your authenticator app shows now.",
     "reasonLabel": "Reason (recorded in the audit)",
     "confirmPrompt": "To confirm, type",
     "currentPassword": "Current password",
@@ -212,6 +213,7 @@
     "serverSuspended": "Server suspended"
   },
   "errors": {
+    "adminConfirmationRequired": "Acting on another administrator needs your password and a code. Refresh the page and try again.",
     "reasonRequired": "Enter a reason (3 to 500 characters).",
     "selfAction": "You cannot do this to your own account.",
     "lastAdmin": "This account is the last active administrator.",
@@ -290,6 +292,7 @@
     "user.revoke_badge": "Badge removed"
   },
   "detail": {
+    "adminTargetConfirmation": "As this account belongs to another administrator, confirm with your password and a code sent to your email.",
     "fullHistory": "Full history",
     "historyDescription": "Everything administration recorded about this account, newest action first.",
     "noHistory": "No actions recorded for this account",
@@ -637,7 +640,7 @@
     "unavailable": "The server does not have pg_dump installed, so it cannot make a backup. See \"Backups\" in the deployment guide.",
     "running": "{{name}} has been downloading a backup since {{when}}. Only one backup runs at a time.",
     "dialogTitle": "Download a full backup",
-    "dialogDescription": "The file will hold password hashes, sessions and every message on the instance. Keep it like the database itself, and encrypt it when it leaves this machine.",
+    "dialogDescription": "The file will hold password hashes, sessions and every message on the instance. Keep it like the database itself, and encrypt it when it leaves this machine. To download it, confirm with your password and a code sent to your email.",
     "dialogConfirm": "Download",
     "contentsTitle": "What it contains",
     "contentsDescription": "Everything needed to rebuild the instance, except the configuration secrets.",

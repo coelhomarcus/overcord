@@ -28,6 +28,7 @@ async function buildApp(webDir: string, adminDir: string): Promise<FastifyInstan
   app.get('/healthz', async () => ({ ok: true }));
   app.get('/api/auth/me', async () => ({ user: 'public' }));
   app.get('/api/admin/users', async () => ({ users: [] }));
+  app.post('/api/client-logs', async (_request, reply) => reply.code(204).send());
   app.get('/uploads/:id', async () => 'file');
   app.register(fastifyStatic, { root: webDir, wildcard: false, index: ['index.html'] });
   app.setNotFoundHandler((request, reply) => {
@@ -96,6 +97,9 @@ describe('with ADMIN_URL, the same process serves the admin site on its host', (
     }
     const post = await app.inject({ method: 'POST', url: '/', headers: { host: ADMIN.host } });
     assert.equal(post.statusCode, 404);
+    // the panel's own error reports
+    const report = await app.inject({ method: 'POST', url: '/api/client-logs', headers: { host: ADMIN.host, origin: ADMIN.url }, payload: {} });
+    assert.equal(report.statusCode, 204);
   });
 
   it('keeps the public host free of the admin site and its API', async () => {

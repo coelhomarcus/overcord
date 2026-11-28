@@ -11,7 +11,7 @@ import { canSendDirectMessage } from '../../src/modules/friendships/friendshipsR
 import { createInvitations } from '../../src/modules/servers/serverInvitationsRepository.js';
 import { invalidateAllServers } from '../../src/modules/servers/serverAccess.js';
 import { PERMISSIONS } from '../../src/modules/servers/permissions.js';
-import { adminHeaders, befriend, db, makeAdminSession, makeServerWithMembers, makeUser, pool } from './helpers.js';
+import { adminHeaders, befriend, db, giveAuthenticator, makeAdminSession, makeServerWithMembers, makeUser, pool } from './helpers.js';
 
 // The permission matrix of docs/contratos.md, executed over HTTP against a real
 // database: for each action, who may do it and, for everyone else, WHICH error
@@ -62,6 +62,8 @@ describe('matrix: admin routes', () => {
     ['list users', 'GET', '/api/admin/users'],
     ['user detail', 'GET', '/api/admin/users/x'],
     ['suspend user', 'POST', '/api/admin/users/x/suspend'],
+    ['request suspension code', 'POST', '/api/admin/users/x/suspend/request'],
+    ['request deletion code', 'POST', '/api/admin/users/x/delete/request'],
     ['reactivate user', 'POST', '/api/admin/users/x/reactivate'],
     ['revoke sessions', 'POST', '/api/admin/users/x/revoke-sessions'],
     ['grant admin', 'POST', '/api/admin/users/x/grant-admin'],
@@ -83,12 +85,16 @@ describe('matrix: admin routes', () => {
     ['resolve report', 'POST', '/api/admin/reports/x/resolve'],
     ['System tab', 'GET', '/api/admin/system'],
     ['sweep orphans', 'POST', '/api/admin/system/sweep-orphans'],
+    ['request backup code', 'POST', '/api/admin/backup/download/request'],
+    ['backup link', 'POST', '/api/admin/backup/download'],
     ['audit', 'GET', '/api/admin/audit'],
   ];
   const body = { reason: 'valid reason for the test', dryRun: true };
 
   it('no session: 401; a plain user, a demoted admin and a suspended one never reach the action', async () => {
     const plain = await actor('pl', 'user', true);
+    // with an app, so the refusal is about the role, not the missing second factor
+    await giveAuthenticator(plain.id);
     const demoted = await actor('dm', 'admin');
     await db.update(users).set({ role: 'user' }).where(eq(users.id, demoted.id)); // session still carries role=admin
     const suspended = await actor('sp', 'admin');

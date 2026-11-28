@@ -5,7 +5,7 @@ import { Avatar } from '@/shared/Avatar';
 import { Button } from '@/shared/ui/primitives/button';
 import { formatFileSize } from '@/shared/lib/formatBytes';
 import { useCursorList } from '@/shared/hooks/useCursorList';
-import { changeAdminRole, deleteUser, fetchAdminUser, fetchAudit, grantBadge, reactivateUser, requestAdminRoleCode, revokeBadge, revokeUserSessions, suspendUser } from './adminApi';
+import { changeAdminRole, deleteUser, fetchAdminUser, fetchAudit, grantBadge, reactivateUser, requestAdminAccountCode, requestAdminRoleCode, revokeBadge, revokeUserSessions, suspendUser } from './adminApi';
 import { AdminDetailTabs } from './AdminDetailTabs';
 import { AdminEntityHeader } from './AdminEntityHeader';
 import { AdminActionRow, AdminFieldRow, AdminFields, AdminSection } from './AdminSection';
@@ -66,6 +66,9 @@ function UserDetail({ id, viewerId }: { id: string; viewerId: string }) {
   const isSelf = user.id === viewerId;
   const suspended = user.status === 'suspended';
   const isAdmin = user.role === 'admin';
+  // another administrator: suspending or deleting them asks for the password and an emailed code
+  const adminTarget = isAdmin && !isSelf;
+  const adminTargetNote = adminTarget ? ` ${t('detail.adminTargetConfirmation')}` : '';
   const badges = knownBadges(detail.badges);
   const badgeDialog = dialog && typeof dialog === 'object' ? dialog : null;
   // revoking your own sessions ends this very session: the re-read would fail, and that is the expected outcome
@@ -232,8 +235,13 @@ function UserDetail({ id, viewerId }: { id: string; viewerId: string }) {
       {tab === 'history' && <UserHistory id={user.id} revision={detail.history[0]?.id ?? ''} />}
 
       <ReasonDialog open={dialog === 'suspend'} onOpenChange={(o) => !o && setDialog(null)} title={t('detail.suspendTitle')}
-        description={t('detail.suspendDialog', { username: user.username })} confirmLabel={t('detail.suspend')} destructive
-        onSubmit={(reason) => mutate(() => suspendUser(user.id, reason))} />
+        description={t('detail.suspendDialog', { username: user.username }) + adminTargetNote} confirmLabel={t('detail.suspend')} destructive
+        {...(adminTarget ? {
+          verification: {
+            requestCode: (reason: string, password: string) => requestAdminAccountCode(user.id, 'suspend', reason, password),
+            onConfirm: (reason: string, code: string) => mutate(() => suspendUser(user.id, reason, code)),
+          },
+        } : { onSubmit: (reason: string) => mutate(() => suspendUser(user.id, reason)) })} />
       <ReasonDialog open={dialog === 'reactivate'} onOpenChange={(o) => !o && setDialog(null)} title={t('detail.reactivateTitle')}
         description={t('detail.reactivateDialog', { username: user.username })} confirmLabel={t('detail.reactivateAccount')}
         onSubmit={(reason) => mutate(() => reactivateUser(user.id, reason))} />
@@ -259,9 +267,14 @@ function UserDetail({ id, viewerId }: { id: string; viewerId: string }) {
           return mutate(() => (action === 'grant' ? grantBadge(user.id, badge, reason) : revokeBadge(user.id, badge, reason)));
         }} />
       <ReasonDialog open={dialog === 'delete'} onOpenChange={(o) => !o && setDialog(null)} title={t('detail.deleteTitle')}
-        description={t('detail.deleteDialog')}
+        description={t('detail.deleteDialog') + adminTargetNote}
         confirmLabel={t('detail.deleteForever')} destructive confirmText={user.username}
-        onSubmit={async (reason, confirm) => { await deleteUser(user.id, reason, confirm); setDeleted(true); }} />
+        {...(adminTarget ? {
+          verification: {
+            requestCode: (reason: string, password: string) => requestAdminAccountCode(user.id, 'delete', reason, password),
+            onConfirm: async (reason: string, code: string, confirm: string) => { await deleteUser(user.id, reason, confirm, code); setDeleted(true); },
+          },
+        } : { onSubmit: async (reason: string, confirm: string) => { await deleteUser(user.id, reason, confirm); setDeleted(true); } })} />
     </div>
   );
 }

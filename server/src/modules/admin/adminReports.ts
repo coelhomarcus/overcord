@@ -7,12 +7,13 @@ import { suspendUser } from './adminUsers.js';
 import { suspendServer } from './adminServers.js';
 import { deleteMessageAsAdmin } from './adminMessages.js';
 import { listAudit, recordAudit, type AuditActor } from './auditLog.js';
+import { lockActingAdmin } from './adminActor.js';
 
 interface Ctx { actor: AuditActor; reason: string; requestId: string }
 
 export type ReportActionResult =
   | { code: 'ok' }
-  | { code: 'not_found' | 'already_closed' | 'invalid_action' | 'action_failed' | 'not_open' | 'busy'; detail?: string };
+  | { code: 'not_found' | 'forbidden' | 'already_closed' | 'invalid_action' | 'action_failed' | 'not_open' | 'busy'; detail?: string };
 
 const createdAtIso = sql<string>`to_char(${reports.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 const reporterName = sql<string | null>`(select u.username from users u where u.id = ${reports.reporterId})`;
@@ -66,6 +67,7 @@ export async function getAdminReport(ctx: { actor: AuditActor; requestId: string
 
 export async function claimReport(ctx: Ctx, reportId: string): Promise<ReportActionResult> {
   return db.transaction(async (tx): Promise<ReportActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
     const [report] = await tx.select().from(reports).where(eq(reports.id, reportId)).for('update').limit(1);
     if (!report) return { code: 'not_found' };
     if (report.status !== 'open') return { code: isClosed(report.status) ? 'already_closed' : 'not_open' };
@@ -136,6 +138,7 @@ async function resolveLocked(ctx: Ctx, reportId: string, input: { dismiss: boole
   }
 
   return db.transaction(async (tx): Promise<ReportActionResult> => {
+    if (!(await lockActingAdmin(tx, ctx.actor.id))) return { code: 'forbidden' };
     // conditioned on the state: a claim may land between the read and here (it
     // only moves open → reviewing, still closable), but a closed report is never rewritten
     const closed = await tx.update(reports).set({

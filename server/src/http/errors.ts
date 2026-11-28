@@ -65,8 +65,15 @@ export const ERROR_REGISTRY = {
   // auth and accounts
   invalid_credentials: { statuses: [401], channel: 'http' },
   account_unavailable: { statuses: [403], channel: 'http' },
-  admin_two_factor_required: { statuses: [403], channel: 'http' },
+  // the panel needs an authenticator app as the second factor (auth/routes.ts)
+  admin_authenticator_required: { statuses: [403], channel: 'http' },
   admin_email_required: { statuses: [409], channel: 'http' },
+  // suspending or deleting another administrator without the password and emailed code (modules/admin)
+  admin_confirmation_required: { statuses: [403], channel: 'http' },
+  // authenticator apps (modules/auth/authenticatorRoutes.ts): no TOTP_ENCRYPTION_KEY, already on, not on
+  authenticator_unavailable: { statuses: [503], channel: 'http' },
+  authenticator_enabled: { statuses: [409], channel: 'http' },
+  authenticator_disabled: { statuses: [409], channel: 'http' },
   // the right password for an account whose deletion grace period is over (auth/accountDeletion.ts)
   account_deleted: { statuses: [403], channel: 'http' },
   // a data export whose download window is over (modules/data-export)

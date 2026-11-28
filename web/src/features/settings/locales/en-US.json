@@ -46,6 +46,7 @@
       "timeFormat": "Time format",
       "presence": "Status",
       "password": "Password",
+      "authenticator": "Authenticator app",
       "twoFactor": "Two-step verification",
       "loginAlerts": "Sign-in alerts",
       "sessions": "Active sessions",
@@ -59,6 +60,7 @@
     }
   },
   "search": {
+    "authenticator": {"title": "Authenticator app", "keywords": "authenticator, microsoft authenticator, google authenticator, totp, code, two-step, 2fa, recovery codes"},
     "accountInfo": {
       "title": "Account information",
       "keywords": "username, change username, display name, admin, account"
@@ -267,6 +269,7 @@
     "hide": "Hide",
     "add": "Add",
     "currentCodeSent": "To confirm it is you, enter the code sent to your current email, {{email}}. Then we will send another one to {{newEmail}}.",
+    "currentAuthenticatorPrompt": "To confirm it is you, type the code from your authenticator app. Then we will send a code to {{newEmail}}.",
     "currentCodeLabel": "Current email code",
     "currentCodeAria": "Code sent to the current email",
     "continue": "Continue",
@@ -485,6 +488,46 @@
     }
   },
   "security": {
+    "authenticator": {
+      "prompt": "Type the 6-digit code your authenticator app shows now.",
+      "sectionDescription": "Use an app such as Microsoft Authenticator or Google Authenticator to make the code asked at sign-in. It is safer than the email code.",
+      "label": "Authenticator app",
+      "descriptionOff": "Off. With it on, signing in with the password asks for the app's code, and the email no longer counts as the second factor.",
+      "descriptionOn_one": "On. Signing in asks for the app's code. {{count}} recovery code left.",
+      "descriptionOn_other": "On. Signing in asks for the app's code. {{count}} recovery codes left.",
+      "unavailable": "This server does not offer authenticator apps. Ask its administrators to set TOTP_ENCRYPTION_KEY.",
+      "fewRecoveryCodes_one": "Only {{count}} recovery code left. Make new ones before you run out.",
+      "fewRecoveryCodes_other": "Only {{count}} recovery codes left. Make new ones before you run out.",
+      "setUp": "Set up",
+      "disable": "Turn off",
+      "newRecoveryCodes": "New recovery codes",
+      "password": "Current password",
+      "continue": "Continue",
+      "passwordHint": {
+        "setup": "Confirm your password to set up the authenticator app.",
+        "disable": "Confirm your password. Then type a code from the app or a recovery code.",
+        "recovery": "Confirm your password. Then type a code from the app. Your current recovery codes stop working."
+      },
+      "emailCodeSent": "As the account uses the email code, we sent a code to {{email}} before switching to the app.",
+      "emailCodeLabel": "Email code",
+      "scanHint": "Scan the QR code with your authenticator app, or type the key into it. Then type the code the app shows.",
+      "qrLabel": "QR code for the authenticator app",
+      "manualKey": "Key to type into the app",
+      "copyKey": "Copy key",
+      "appCodeLabel": "App code",
+      "appCodeHint": "The 6 digits the app shows now.",
+      "turnOn": "Turn on",
+      "challengeHint": "Type the 6-digit code from your authenticator app or one of your recovery codes.",
+      "challengeLabel": "App or recovery code",
+      "codesTitle": "Recovery codes",
+      "codesHint": "Keep these codes somewhere safe. If you lose your phone, each one lets you sign in once. They are not shown again.",
+      "copyCodes": "Copy codes",
+      "downloadCodes": "Download .txt",
+      "savedCodes": "I saved them",
+      "fileHeading": "Overcord recovery codes. Each works once.",
+      "failed": "Could not continue.",
+      "confirmFailed": "Could not confirm the app code."
+    },
     "loading": "Loading…",
     "loadFailed": "Could not load.",
     "cancel": "Cancel",
@@ -504,6 +547,7 @@
       "changed_other": "Password changed. {{count}} other sessions were ended."
     },
     "twoFactor": {
+      "replacedByAuthenticator": "With the authenticator app on, signing in no longer uses the email code.",
       "label": "Email code at sign-in",
       "descriptionOff": "Off. When on, signing in with your password also asks for a code sent to the account email.",
       "descriptionOn": "On. Signing in with your password also asks for a code sent to the account email.",

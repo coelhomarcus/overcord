@@ -104,7 +104,7 @@ It is a development setting. The server refuses to start when it is set with `NO
 
 ## Create an administrator
 
-Configure an [email provider](INTEGRATIONS.md#resend) or the local mail sink and turn on two-step verification in the account's **Settings → Security** before provisioning. See [administrator provisioning](DEPLOY.md#administration-site).
+Set `TOTP_ENCRYPTION_KEY` in `.env` (`openssl rand -base64 32`) and set up an authenticator app in the account's **Settings → Security** before provisioning: the panel only signs in with one. See [administrator provisioning](DEPLOY.md#administration-site).
 
 ```bash
 bun run admin:grant <your-username>
@@ -191,6 +191,7 @@ Every script runs from the repository root.
 | `bun run backup` / `restore` | Backup and restore, see [DEPLOY.md](DEPLOY.md#backups). |
 | `bun run backup:rehearse` | Backup, restore and a boot on throwaway local databases ([below](#backup-scripts-locally)). |
 | `bun run admin:grant -- <username>` / `admin:revoke` | Gives or takes administrator access. |
+| `bun run auth:remove-authenticator -- <username>` | Removes an account's authenticator app and recovery codes, for someone who lost both. Ends its panel sessions and leaves a `cli` audit entry. |
 | `bun run emoji:data` | Rebuilds `web/public/emoji-data/<lang>/emojis.json` from the pinned `emojibase-data`, leaving out what the pinned `@discordapp/twemoji` cannot draw. Run it after bumping either. |
 | `bun run icons` | Rebuilds the web app's Fluent icons from `@fluentui/svg-icons`. Add new icons to `FLUENT_ICONS` in `web/scripts/buildIcons.ts`. |
 | `bun run --cwd admin icons` | Rebuilds the administration site's Fluent icons. Add new icons to `FLUENT_ICONS` in `admin/scripts/buildIcons.ts`. Each frontend tests that its generated file is current. |
@@ -295,7 +296,7 @@ A daily sweep (`modules/retention/`, two minutes after boot, then every 24 hours
 | `OUTBOX_RETENTION_DAYS` | `7` | delivered `outbox_events` (failed ones stay for an administrator to see) |
 | `SERVER_AUDIT_RETENTION_DAYS` | `90` | `server_audit_logs`, each server's own log |
 
-App login sessions expire after `SESSION_TTL_DAYS` (30 by default). [Administration site sessions](DEPLOY.md#administration-site) expire after 7 days. Both also end after `SESSION_IDLE_DAYS` of inactivity (14 by default, with `0` to turn off idle expiry). Login sessions store the address and browser. Activity sessions are pruned 400 days after they were last seen. `/admin/system` shows each limit and what the last sweep deleted.
+App login sessions expire after `SESSION_TTL_DAYS` (30 by default). [Administration site sessions](DEPLOY.md#administration-site) expire after 24 hours. Both also end after `SESSION_IDLE_DAYS` of inactivity (14 by default, with `0` to turn off idle expiry). Login sessions store the address and browser. Activity sessions are pruned 400 days after they were last seen. `/admin/system` shows each limit and what the last sweep deleted.
 
 A new table with retention gets an entry in `modules/retention/retentionTargets.ts` (or calls `registerRetentionTarget`) with its own variable read through `parseRetentionDays`, a row above, a line in `.env.optional.example` and a label under `system.retentionTables` in the admin locales.
 
