@@ -44,7 +44,7 @@ describe('admin actions re-check the acting admin', () => {
       const c = ctx(actor);
       assert.equal((await suspendServer(c, serverId)).code, 'forbidden');
       assert.equal((await assignServerOwner(c, serverId, member.id)).code, 'forbidden');
-      assert.equal((await deleteServerAsAdmin(c, serverId)).code, 'forbidden');
+      assert.equal((await deleteServerAsAdmin(c, serverId, 'itest')).code, 'forbidden');
       assert.equal((await revokeWebhook(c, webhookId)).code, 'forbidden');
       assert.equal((await claimReport(c, reportId)).code, 'forbidden');
       assert.equal((await revokeUserSessions(c, member.id)).code, 'forbidden');

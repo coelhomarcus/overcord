@@ -208,7 +208,7 @@ export function registerAdminRoutes(fastify: FastifyInstance): void {
   });
   fastify.delete('/api/admin/servers/:id', async (request: FastifyRequest<{ Params: IdParams }>, reply) => {
     const m = await mutating(request, reply);
-    if (m) respond(reply, await deleteServerAsAdmin({ actor: m.actor, reason: m.reason, requestId: request.id }, request.params.id));
+    if (m) respond(reply, await deleteServerAsAdmin({ actor: m.actor, reason: m.reason, requestId: request.id }, request.params.id, String(m.body.confirm ?? '')));
   });
 
   fastify.get('/api/admin/webhooks', (request: FastifyRequest<{ Querystring: Query }>, reply) => reading(request, reply, () => {

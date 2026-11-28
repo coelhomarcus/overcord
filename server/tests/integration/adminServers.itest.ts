@@ -71,7 +71,13 @@ describe('admin servers and webhooks (real Postgres)', () => {
     assert.equal((await db.select({ ownerId: servers.ownerId }).from(servers).where(eq(servers.id, serverId)))[0]!.ownerId, member.id);
     assert.equal((await call(admin, 'POST', `/api/admin/servers/${serverId}/owner`, { ...reason, userId: admin.id })).status, 409, 'only a member can own it');
 
-    assert.equal((await call(admin, 'DELETE', `/api/admin/servers/${serverId}`, reason)).status, 200);
+    const deleteAs = (confirm?: string) => call(admin, 'DELETE', `/api/admin/servers/${serverId}`, { ...reason, ...(confirm === undefined ? {} : { confirm }) });
+    for (const wrong of [undefined, '', 'Outro']) {
+      const refused = await deleteAs(wrong);
+      assert.deepEqual([refused.status, refused.body.error.code], [400, 'confirmation_mismatch'], `confirm ${String(wrong)}`);
+    }
+    assert.equal((await db.select().from(servers).where(eq(servers.id, serverId))).length, 1, 'nothing was deleted');
+    assert.equal((await deleteAs(' ciclo ')).status, 200, 'the name, in any case');
     assert.equal((await db.select().from(servers).where(eq(servers.id, serverId))).length, 0);
     assert.equal((await db.select().from(messages).where(eq(messages.conversationId, textChannelId))).length, 0);
 

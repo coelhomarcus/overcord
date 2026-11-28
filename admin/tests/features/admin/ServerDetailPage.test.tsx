@@ -65,7 +65,7 @@ describe('ServerDetailPage', () => {
     expect(screen.getByRole('button', { name: 'Excluir para sempre' })).toBeDisabled();
     await u.type(screen.getByLabelText(/Para confirmar/), 'Squad');
     await u.click(screen.getByRole('button', { name: 'Excluir para sempre' }));
-    await waitFor(() => expect(mocked.deleteServer).toHaveBeenCalledWith('g1', 'illegal'));
+    await waitFor(() => expect(mocked.deleteServer).toHaveBeenCalledWith('g1', 'illegal', 'Squad'));
   });
 
   it('the owner dialog names the current and the new owner, and nothing changes until the server confirms', async () => {

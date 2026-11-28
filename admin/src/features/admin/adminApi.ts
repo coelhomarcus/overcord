@@ -102,8 +102,9 @@ export const fetchAdminServer = (id: string, cursor?: string | null) => adminFet
 export const suspendServer = (id: string, reason: string) => post(`/api/admin/servers/${encodeURIComponent(id)}/suspend`, { reason });
 export const reactivateServer = (id: string, reason: string) => post(`/api/admin/servers/${encodeURIComponent(id)}/reactivate`, { reason });
 export const assignServerOwner = (id: string, userId: string, reason: string) => post(`/api/admin/servers/${encodeURIComponent(id)}/owner`, { userId, reason });
-export const deleteServer = (id: string, reason: string) =>
-  adminFetch<{ ok: true }>(`/api/admin/servers/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason }) });
+/** `confirm`: the server's name as typed (its id when it has none); the server checks it. */
+export const deleteServer = (id: string, reason: string, confirm: string) =>
+  adminFetch<{ ok: true }>(`/api/admin/servers/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason, confirm }) });
 
 // ---- webhooks ----------------------------------------------------------------
 
