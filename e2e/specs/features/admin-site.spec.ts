@@ -54,7 +54,7 @@ test('administration uses its own origin and session', async ({ users, request }
   await signInWithCode(page, signedIn);
   const headers = await (await verified).headersArray();
   const sessionCookie = headers.find(({ name, value }) => name.toLowerCase() === 'set-cookie' && value.startsWith('overcord_admin='));
-  expect(sessionCookie?.value.split('; ')).toContain('Max-Age=604800');
+  expect(sessionCookie?.value.split('; ')).toContain('Max-Age=86400');
   await expect(page.getByRole('heading', { name: 'Acesso', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeVisible();
   expect((await page.request.get(`${ADMIN_URL}/api/admin/users`)).ok()).toBe(true);
